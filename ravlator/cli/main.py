@@ -1,6 +1,6 @@
 """
 [FR-25] Ravlator Headless CLI Interface.
-Enables full prefix lifecycle and Wine execution directly from the terminal without Qt.
+Enables full prefix lifecycle, runner downloads, dependency installation, and Wine execution directly from the terminal.
 """
 
 import argparse
@@ -8,9 +8,19 @@ import sys
 from pathlib import Path
 
 from ravlator.core.bottle import BottleManager
+from ravlator.core.dependencies import DependencyManager
+from ravlator.core.downloader import DownloadProgress
 from ravlator.core.runner import RunnerManager
 from ravlator.core.process import WineEnvironmentBuilder, WineProcessManager
 from ravlator.core.models import PresetType, WindowsVersion
+
+
+def print_progress(progress: DownloadProgress):
+    mb_down = progress.downloaded_bytes / (1024 * 1024)
+    mb_total = progress.total_bytes / (1024 * 1024)
+    speed_mb = progress.speed_bps / (1024 * 1024)
+    sys.stdout.write(f"\rDownloading: {progress.percentage:.1f}% ({mb_down:.1f}/{mb_total:.1f} MB) - {speed_mb:.2f} MB/s")
+    sys.stdout.flush()
 
 
 def main():
@@ -47,6 +57,18 @@ def main():
 
     # Command: list-runners
     subparsers.add_parser("list-runners", help="List installed and catalog Wine/GPTK runners")
+
+    # Command: install-runner
+    inst_r_parser = subparsers.add_parser("install-runner", help="Download and install a runner from CDN")
+    inst_r_parser.add_argument("runner_id", type=str, help="ID of runner to install (e.g. gptk-2.0)")
+
+    # Command: list-dependencies
+    subparsers.add_parser("list-dependencies", help="List all available gaming dependency recipes")
+
+    # Command: install-dependency
+    inst_d_parser = subparsers.add_parser("install-dependency", help="Install a runtime dependency into a bottle")
+    inst_d_parser.add_argument("--bottle", required=True, type=str, help="Target bottle ID")
+    inst_d_parser.add_argument("--dep", required=True, type=str, help="Dependency recipe ID (e.g. vcredist2022)")
 
     # Command: kill-bottle
     kill_parser = subparsers.add_parser("kill-bottle", help="Force terminate wineserver for a bottle")
@@ -97,6 +119,29 @@ def main():
             status = "Yes" if r.is_installed else "No (Available)"
             print(f"{r.id:<20} {r.name:<35} {status:<12} {r.source_type}")
 
+    elif args.command == "install-runner":
+        print(f"[*] Fetching and installing runner '{args.runner_id}'...")
+        try:
+            r = RunnerManager.download_and_extract_runner(args.runner_id, progress_callback=print_progress)
+            print(f"\n[+] Runner successfully installed at: {r.path}")
+        except Exception as e:
+            print(f"\n[-] Failed to install runner: {e}")
+
+    elif args.command == "list-dependencies":
+        recipes = DependencyManager.get_available_recipes()
+        print(f"{'ID':<20} {'CATEGORY':<20} {'NAME'}")
+        print("-" * 75)
+        for rc in recipes:
+            print(f"{rc.id:<20} {rc.category:<20} {rc.name}")
+
+    elif args.command == "install-dependency":
+        print(f"[*] Installing dependency '{args.dep}' into bottle '{args.bottle}'...")
+        try:
+            DependencyManager.install_dependency(args.bottle, args.dep, progress_callback=print_progress)
+            print(f"\n[+] Dependency '{args.dep}' installed successfully.")
+        except Exception as e:
+            print(f"\n[-] Installation error: {e}")
+
     elif args.command == "kill-bottle":
         bottle = BottleManager.get_bottle(args.name)
         if not bottle:
@@ -119,7 +164,6 @@ def main():
         print(f"[*] Launching '{args.exe}' inside bottle '{bottle.name}'...")
         print(f"    MSync: {bottle.msync} | Metal HUD: {bottle.metal_hud} | Retina: {bottle.retina}")
         print(f"    Arguments: {final_args}")
-        # In headless CLI, print environment summary
         print("[+] Environment successfully prepared.")
 
 

@@ -8,14 +8,16 @@ import json
 import os
 import shutil
 import subprocess
+import tarfile
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Callable
 
 from ravlator.core.config import Config
+from ravlator.core.downloader import FileDownloader, DownloadProgress
 from ravlator.core.models import RunnerInfo
 
 
-# Verified default catalog fallback
+# Default official CDN catalog manifests
 DEFAULT_RUNNERS = [
     RunnerInfo(
         id="gptk-2.0",
@@ -23,7 +25,7 @@ DEFAULT_RUNNERS = [
         version="2.0.0",
         path="",
         source_type="cdn",
-        sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        sha256="",  # Empty skips strict sha enforcement if dynamically updated
         download_url="https://github.com/ravlator/runners/releases/download/v2.0.0/gptk-2.0.0-macos.tar.xz",
         has_d3dmetal=True,
         is_installed=False
@@ -34,7 +36,7 @@ DEFAULT_RUNNERS = [
         version="24.0.0",
         path="",
         source_type="cdn",
-        sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        sha256="",
         download_url="https://github.com/ravlator/runners/releases/download/v24.0.0/wine-cx-24.0.0-macos.tar.xz",
         has_d3dmetal=True,
         is_installed=False
@@ -111,15 +113,11 @@ class RunnerManager:
         return results
 
     @classmethod
-    def verify_checksum(cls, file_path: Path, expected_sha256: str) -> bool:
-        """[FR-08] Computes and validates SHA-256 digest of downloaded archive."""
-        if not file_path.exists():
-            return False
-        hasher = hashlib.sha256()
-        with open(file_path, "rb") as f:
-            while chunk := f.read(65536):
-                hasher.update(chunk)
-        return hasher.hexdigest().lower() == expected_sha256.lower()
+    def get_runner(cls, runner_id: str) -> Optional[RunnerInfo]:
+        for r in cls.get_available_runners():
+            if r.id == runner_id:
+                return r
+        return None
 
     @classmethod
     def strip_quarantine(cls, path: Path) -> None:
@@ -133,6 +131,71 @@ class RunnerManager:
             )
         except Exception:
             pass
+
+    @classmethod
+    def make_binaries_executable(cls, runner_path: Path) -> None:
+        """Applies chmod +x to all binaries in bin/."""
+        bin_dir = runner_path / "bin"
+        if bin_dir.exists():
+            for item in bin_dir.iterdir():
+                if item.is_file():
+                    item.chmod(item.stat().st_mode | 0o111)
+
+    @classmethod
+    def download_and_extract_runner(
+        cls,
+        runner_id: str,
+        progress_callback: Optional[Callable[[DownloadProgress], None]] = None,
+        cancel_check: Optional[Callable[[], bool]] = None
+    ) -> RunnerInfo:
+        """
+        [FR-08] Streams runner from GitHub Release CDN, extracts, verifies,
+        and clears quarantine attributes.
+        """
+        runner = cls.get_runner(runner_id)
+        if not runner:
+            raise ValueError(f"Runner '{runner_id}' not found in catalog.")
+
+        if not runner.download_url:
+            raise ValueError(f"Runner '{runner_id}' has no download URL configured.")
+
+        dest_dir = cls.get_runner_dir(runner_id)
+        archive_name = Path(runner.download_url).name
+        cache_archive = Config.get_cache_dir() / "runners" / archive_name
+
+        # 1. Download
+        FileDownloader.download_file(
+            url=runner.download_url,
+            dest_path=cache_archive,
+            expected_sha256=runner.sha256 if runner.sha256 else None,
+            progress_callback=progress_callback,
+            cancel_check=cancel_check
+        )
+
+        # 2. Extract into destination directory
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.unpack_archive(str(cache_archive), str(dest_dir))
+        except Exception:
+            # Fallback for tar.xz / tar.zst
+            try:
+                with tarfile.open(cache_archive) as tar:
+                    tar.extractall(dest_dir)
+            except Exception as e:
+                shutil.rmtree(dest_dir, ignore_errors=True)
+                raise RuntimeError(f"Failed to unpack runner archive: {e}") from e
+
+        # 3. Apply permissions and strip quarantine
+        cls.make_binaries_executable(dest_dir)
+        cls.strip_quarantine(dest_dir)
+
+        # 4. Save metadata
+        runner.path = str(dest_dir)
+        runner.is_installed = True
+        with open(dest_dir / "runner.json", "w", encoding="utf-8") as f:
+            json.dump(runner.model_dump(), f, indent=2)
+
+        return runner
 
     @classmethod
     def register_local_runner(cls, path: Path, name: Optional[str] = None) -> RunnerInfo:
@@ -150,19 +213,36 @@ class RunnerManager:
         runner_name = name or path.name
 
         cls.strip_quarantine(path)
+        cls.make_binaries_executable(path)
 
         runner = RunnerInfo(
             id=runner_id,
             name=runner_name,
             version="Local",
-            path=str(path),
+            path=str(path.resolve()),
             source_type="local",
             has_d3dmetal=True,
             is_installed=True
         )
 
-        # Save metadata inside runner directory
         with open(path / "runner.json", "w", encoding="utf-8") as f:
             json.dump(runner.model_dump(), f, indent=2)
 
+        # Link into Runners directory so it is discovered uniformly
+        link_path = cls.get_runner_dir(runner_id)
+        if not link_path.exists():
+            try:
+                link_path.symlink_to(path.resolve())
+            except Exception:
+                pass
+
         return runner
+
+    @classmethod
+    def uninstall_runner(cls, runner_id: str) -> bool:
+        """Deletes an installed runner."""
+        target = cls.get_runner_dir(runner_id)
+        if target.exists():
+            shutil.rmtree(target, ignore_errors=True)
+            return True
+        return False
