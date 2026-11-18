@@ -1,0 +1,63 @@
+"""
+[Section 3.1, 5.1.1] Icon Utility for macOS PySide6 Interface.
+Renders vector icons with dynamic color tinting for macOS Light & Dark Modes.
+"""
+
+from pathlib import Path
+from typing import Optional
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PySide6.QtSvg import QSvgRenderer
+
+
+def get_icon(name: str, color: Optional[QColor] = None, size: QSize = QSize(20, 20)) -> QIcon:
+    """
+    Renders an SVG icon from assets/icons/lucide/, or draws a clean vector fallback.
+    """
+    svg_path = Path("assets/icons/lucide") / f"{name}.svg"
+    
+    if svg_path.exists():
+        renderer = QSvgRenderer(str(svg_path))
+        if renderer.isValid():
+            pixmap = QPixmap(size)
+            pixmap.fill(Qt.transparent)
+            painter = QPainter(pixmap)
+            renderer.render(painter)
+            if color and color.isValid():
+                painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+                painter.fillRect(pixmap.rect(), color)
+            painter.end()
+            return QIcon(pixmap)
+
+    # Fallback programmatic icon generator for standalone execution
+    pixmap = QPixmap(size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    
+    draw_color = color if color and color.isValid() else QColor("#8E8E93")
+    painter.setPen(draw_color)
+    painter.setBrush(Qt.NoBrush)
+
+    w, h = size.width(), size.height()
+    if name == "play":
+        painter.setBrush(draw_color)
+        painter.drawPolygon([
+            pixmap.rect().topLeft() + (QSize(4, 3)),
+            pixmap.rect().bottomLeft() + (QSize(4, -3)),
+            pixmap.rect().topRight() + (QSize(-4, h // 2))
+        ])
+    elif name == "plus":
+        painter.drawLine(w // 2, 4, w // 2, h - 4)
+        painter.drawLine(4, h // 2, w - 4, h // 2)
+    elif name == "settings":
+        painter.drawEllipse(3, 3, w - 6, h - 6)
+        painter.drawEllipse(w // 2 - 2, h // 2 - 2, 4, 4)
+    elif name in ("stop", "square"):
+        painter.setBrush(draw_color)
+        painter.drawRect(5, 5, w - 10, h - 10)
+    else:
+        painter.drawRoundedRect(3, 3, w - 6, h - 6, 3, 3)
+
+    painter.end()
+    return QIcon(pixmap)
