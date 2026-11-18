@@ -22,6 +22,8 @@ from ravlator.core.models import BottleConfig, PresetType, WindowsVersion
 from ravlator.core.runner import RunnerManager
 from ravlator.core.process import WineEnvironmentBuilder, WineProcessManager
 from ravlator.gui.utils.icons import get_icon
+from ravlator.gui.views.dependencies_dialog import DependenciesDialog
+from ravlator.gui.views.runners_dialog import RunnersDialog
 
 
 class NewBottleDialog(QDialog):
@@ -110,6 +112,11 @@ class MainWindow(QMainWindow):
         new_btn.clicked.connect(self._create_bottle_dialog)
         sidebar_layout.addWidget(new_btn)
 
+        runners_btn = QPushButton(" Manage Runners")
+        runners_btn.setIcon(get_icon("settings"))
+        runners_btn.clicked.connect(self._open_runners_dialog)
+        sidebar_layout.addWidget(runners_btn)
+
         main_layout.addWidget(sidebar)
 
         # Right Content View
@@ -140,6 +147,11 @@ class MainWindow(QMainWindow):
         self.btn_open_drive.clicked.connect(self._open_drive_c)
         header_layout.addWidget(self.btn_open_drive)
 
+        self.btn_dependencies = QPushButton(" Dependencies")
+        self.btn_dependencies.setEnabled(False)
+        self.btn_dependencies.clicked.connect(self._open_dependencies_dialog)
+        header_layout.addWidget(self.btn_dependencies)
+
         self.btn_stop = QPushButton(" Stop")
         self.btn_stop.setIcon(get_icon("stop"))
         self.btn_stop.setEnabled(False)
@@ -164,6 +176,14 @@ class MainWindow(QMainWindow):
         t_font.setBold(True)
         toggles_title.setFont(t_font)
         toggles_layout.addWidget(toggles_title)
+
+        runner_row = QHBoxLayout()
+        runner_row.addWidget(QLabel("Assigned Runner:"))
+        self.runner_combo = QComboBox()
+        self.runner_combo.currentIndexChanged.connect(self._on_runner_changed)
+        runner_row.addWidget(self.runner_combo)
+        runner_row.addStretch()
+        toggles_layout.addLayout(runner_row)
 
         self.chk_msync = QCheckBox("MSync (Darwin Mach Semaphore Synchronization)")
         self.chk_msync.stateChanged.connect(self._update_settings)
@@ -200,6 +220,7 @@ class MainWindow(QMainWindow):
         self.bottle_title.setText("No Bottles Configured")
         self.btn_run_exe.setEnabled(False)
         self.btn_open_drive.setEnabled(False)
+        self.btn_dependencies.setEnabled(False)
         self.btn_stop.setEnabled(False)
         self.toggles_box.setEnabled(False)
 
@@ -217,12 +238,44 @@ class MainWindow(QMainWindow):
         self.bottle_title.setText(bottle.name)
         self.btn_run_exe.setEnabled(True)
         self.btn_open_drive.setEnabled(True)
+        self.btn_dependencies.setEnabled(True)
         self.btn_stop.setEnabled(True)
         self.toggles_box.setEnabled(True)
+
+        # Populate available runners [FR-09]
+        self.runner_combo.blockSignals(True)
+        self.runner_combo.clear()
+        runners = RunnerManager.get_available_runners()
+        for r in runners:
+            label = f"{r.name} ({'Installed' if r.is_installed else 'CDN'})"
+            self.runner_combo.addItem(label, r.id)
+            if r.id == bottle.runner_id:
+                self.runner_combo.setCurrentIndex(self.runner_combo.count() - 1)
+        self.runner_combo.blockSignals(False)
 
         self.chk_msync.setChecked(bottle.msync)
         self.chk_metal_hud.setChecked(bottle.metal_hud)
         self.chk_retina.setChecked(bottle.retina)
+
+    def _on_runner_changed(self):
+        if not self.current_bottle:
+            return
+        selected_runner_id = self.runner_combo.currentData()
+        if selected_runner_id and selected_runner_id != self.current_bottle.runner_id:
+            self.current_bottle.runner_id = selected_runner_id
+            BottleManager.save_bottle_config(self.current_bottle)
+
+    def _open_dependencies_dialog(self):
+        if not self.current_bottle:
+            return
+        dialog = DependenciesDialog(self.current_bottle, self)
+        dialog.exec()
+
+    def _open_runners_dialog(self):
+        dialog = RunnersDialog(self)
+        dialog.exec()
+        if self.current_bottle and self.bottle_list.currentItem():
+            self._on_bottle_selected(self.bottle_list.currentItem())
 
     def _create_bottle_dialog(self):
         dialog = NewBottleDialog(self)
