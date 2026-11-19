@@ -26,9 +26,9 @@ def get_icon(name: str, color: Optional[QColor] = None, size: QSize = QSize(20, 
             pixmap.fill(Qt.transparent)
             painter = QPainter(pixmap)
             renderer.render(painter)
-            if color and color.isValid():
-                painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
-                painter.fillRect(pixmap.rect(), color)
+            tint = color if color and color.isValid() else QColor("#1D1D1F")
+            painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+            painter.fillRect(pixmap.rect(), tint)
             painter.end()
             return QIcon(pixmap)
 
@@ -38,7 +38,7 @@ def get_icon(name: str, color: Optional[QColor] = None, size: QSize = QSize(20, 
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing)
     
-    draw_color = color if color and color.isValid() else QColor("#8E8E93")
+    draw_color = color if color and color.isValid() else QColor("#1D1D1F")
     painter.setPen(draw_color)
     painter.setBrush(Qt.NoBrush)
 

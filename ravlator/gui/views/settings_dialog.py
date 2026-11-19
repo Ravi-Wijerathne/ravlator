@@ -49,9 +49,9 @@ class SettingsDialog(QDialog):
 
         # Theme Mode
         self.theme_combo = QComboBox()
+        self.theme_combo.addItem("Light Mode (Standard macOS)", "light")
+        self.theme_combo.addItem("Dark Mode (Preview)", "dark")
         self.theme_combo.addItem("Follow macOS System Theme", "system")
-        self.theme_combo.addItem("Dark Mode", "dark")
-        self.theme_combo.addItem("Light Mode", "light")
         form.addRow("UI Appearance:", self.theme_combo)
 
         # Wine Debug Output Verbosity
@@ -87,7 +87,7 @@ class SettingsDialog(QDialog):
             self.runner_combo.setCurrentIndex(idx_r)
 
         # Theme
-        t_val = settings.get("theme_mode", "system")
+        t_val = settings.get("theme_mode", "light")
         idx_t = self.theme_combo.findData(t_val)
         if idx_t >= 0:
             self.theme_combo.setCurrentIndex(idx_t)

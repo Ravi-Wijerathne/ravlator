@@ -61,7 +61,7 @@ class Config:
             default_settings = {
                 "default_runner": "gptk-2.0",
                 "check_updates": True,
-                "theme_mode": "system",  # 'system', 'dark', 'light'
+                "theme_mode": "light",
                 "active_bottle_id": None
             }
             cls.save_global_settings(default_settings)

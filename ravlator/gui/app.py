@@ -19,15 +19,14 @@ def main():
     app.setApplicationName("Ravlator")
     app.setOrganizationName("Ravlator")
     app.setApplicationDisplayName("Ravlator")
+    app.setStyle("Fusion")
 
     # Set default native macOS font hierarchy
-    font = QFont("-apple-system", 12)
+    font = QFont("-apple-system", 13)
     app.setFont(font)
 
-    # Load and apply theme palette [SRS Section 5.1]
-    settings = Config.load_global_settings()
-    theme_mode = settings.get("theme_mode", "dark")
-    app.setStyleSheet(get_stylesheet(theme_mode))
+    # Apply unified macOS Light Theme [User preference: light theme only]
+    app.setStyleSheet(get_stylesheet("light"))
 
     window = MainWindow()
     window.show()
