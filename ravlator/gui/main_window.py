@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QListWidget, QListWidgetItem,
     QLabel, QPushButton, QFileDialog, QMessageBox, QFrame, QScrollArea,
     QCheckBox, QComboBox, QLineEdit, QDialog, QDialogButtonBox, QFormLayout,
-    QTableWidget, QTableWidgetItem, QHeaderView
+    QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget, QGridLayout, QGroupBox
 )
 
 from ravlator.core.bottle import BottleManager
@@ -145,8 +145,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Ravlator — Windows Gaming Manager")
-        self.resize(1020, 680)
-        self.setMinimumSize(850, 550)
+        self.resize(1060, 720)
+        self.setMinimumSize(920, 620)
 
         self.current_bottle: Optional[BottleConfig] = None
 
@@ -162,8 +162,8 @@ class MainWindow(QMainWindow):
 
         # Left Navigation Sidebar
         sidebar = QWidget()
+        sidebar.setObjectName("sidebar")
         sidebar.setFixedWidth(240)
-        sidebar.setStyleSheet("background-color: palette(window); border-right: 1px solid palette(mid);")
         sidebar_layout = QVBoxLayout(sidebar)
         sidebar_layout.setContentsMargins(12, 16, 12, 16)
         sidebar_layout.setSpacing(10)
@@ -176,7 +176,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(sidebar_title)
 
         self.bottle_list = QListWidget()
-        self.bottle_list.setStyleSheet("border: none; background: transparent;")
+        self.bottle_list.setObjectName("bottleList")
         self.bottle_list.currentItemChanged.connect(self._on_bottle_selected)
         sidebar_layout.addWidget(self.bottle_list)
 
@@ -207,6 +207,7 @@ class MainWindow(QMainWindow):
 
         # Right Content View
         self.content_area = QWidget()
+        self.content_area.setObjectName("contentArea")
         self.content_layout = QVBoxLayout(self.content_area)
         self.content_layout.setContentsMargins(24, 20, 24, 20)
         self.content_layout.setSpacing(14)
@@ -216,14 +217,15 @@ class MainWindow(QMainWindow):
         self.bottle_title = QLabel("Select a Bottle")
         b_font = QFont()
         b_font.setBold(True)
-        b_font.setPointSize(20)
+        b_font.setPointSize(22)
         self.bottle_title.setFont(b_font)
         header_layout.addWidget(self.bottle_title)
 
         header_layout.addStretch()
 
         self.btn_run_exe = QPushButton(" Run Executable")
-        self.btn_run_exe.setIcon(get_icon("play"))
+        self.btn_run_exe.setObjectName("primaryAction")
+        self.btn_run_exe.setIcon(get_icon("play", color=QColor("#FFFFFF")))
         self.btn_run_exe.setEnabled(False)
         self.btn_run_exe.clicked.connect(self._run_executable)
         header_layout.addWidget(self.btn_run_exe)
@@ -241,99 +243,31 @@ class MainWindow(QMainWindow):
 
         self.content_layout.addLayout(header_layout)
 
-        # Secondary Actions Toolbar
-        tools_layout = QHBoxLayout()
+        # Tabbed Bottle Details Container [NFR-01]
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setEnabled(False)
 
-        self.btn_install_store = QPushButton(" Install Game Store")
-        self.btn_install_store.setEnabled(False)
-        self.btn_install_store.clicked.connect(self._open_store_installer)
-        tools_layout.addWidget(self.btn_install_store)
+        # ============================================================
+        # TAB 1: Programs & Shortcuts
+        # ============================================================
+        tab_programs = QWidget()
+        tab_programs_layout = QVBoxLayout(tab_programs)
+        tab_programs_layout.setContentsMargins(16, 16, 16, 16)
+        tab_programs_layout.setSpacing(12)
 
-        self.btn_dependencies = QPushButton(" Dependencies")
-        self.btn_dependencies.setEnabled(False)
-        self.btn_dependencies.clicked.connect(self._open_dependencies_dialog)
-        tools_layout.addWidget(self.btn_dependencies)
+        prog_top_row = QHBoxLayout()
+        prog_top_title = QLabel("Installed Programs && Game Shortcuts")
+        pt_font = QFont()
+        pt_font.setBold(True)
+        pt_font.setPointSize(14)
+        prog_top_title.setFont(pt_font)
+        prog_top_row.addWidget(prog_top_title)
+        prog_top_row.addStretch()
 
-        self.btn_task_mgr = QPushButton(" Task Manager")
-        self.btn_task_mgr.setEnabled(False)
-        self.btn_task_mgr.clicked.connect(self._open_task_manager)
-        tools_layout.addWidget(self.btn_task_mgr)
-
-        self.btn_logs = QPushButton(" Live Logs")
-        self.btn_logs.setEnabled(False)
-        self.btn_logs.clicked.connect(self._open_log_viewer)
-        tools_layout.addWidget(self.btn_logs)
-
-        self.btn_snapshots = QPushButton(" Snapshots")
-        self.btn_snapshots.setEnabled(False)
-        self.btn_snapshots.clicked.connect(self._open_snapshots_dialog)
-        tools_layout.addWidget(self.btn_snapshots)
-
-        self.btn_export = QPushButton(" Export...")
-        self.btn_export.setEnabled(False)
-        self.btn_export.clicked.connect(self._export_bottle_dialog)
-        tools_layout.addWidget(self.btn_export)
-
-        self.btn_dll_overrides = QPushButton(" DLLs")
-        self.btn_dll_overrides.setEnabled(False)
-        self.btn_dll_overrides.clicked.connect(self._open_dll_overrides)
-        tools_layout.addWidget(self.btn_dll_overrides)
-
-        self.btn_winecfg = QPushButton(" winecfg")
-        self.btn_winecfg.setEnabled(False)
-        self.btn_winecfg.clicked.connect(self._launch_winecfg)
-        tools_layout.addWidget(self.btn_winecfg)
-
-        self.btn_regedit = QPushButton(" regedit")
-        self.btn_regedit.setEnabled(False)
-        self.btn_regedit.clicked.connect(self._launch_regedit)
-        tools_layout.addWidget(self.btn_regedit)
-
-        self.btn_terminal = QPushButton(" Terminal")
-        self.btn_terminal.setEnabled(False)
-        self.btn_terminal.clicked.connect(self._launch_terminal)
-        tools_layout.addWidget(self.btn_terminal)
-
-        self.btn_clone = QPushButton(" Clone")
-        self.btn_clone.setEnabled(False)
-        self.btn_clone.clicked.connect(self._duplicate_bottle_dialog)
-        tools_layout.addWidget(self.btn_clone)
-
-        self.btn_reset = QPushButton(" Reset")
-        self.btn_reset.setEnabled(False)
-        self.btn_reset.setToolTip("Restores vanilla registry hives and clears temporary Wine caches")
-        self.btn_reset.clicked.connect(self._reset_bottle_dialog)
-        tools_layout.addWidget(self.btn_reset)
-
-        self.btn_delete = QPushButton(" Delete")
-        self.btn_delete.setEnabled(False)
-        self.btn_delete.setStyleSheet("color: #FF3B30;")
-        self.btn_delete.clicked.connect(self._delete_bottle_dialog)
-        tools_layout.addWidget(self.btn_delete)
-
-        tools_layout.addStretch()
-        self.content_layout.addLayout(tools_layout)
-
-        # Separator
-        line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        line.setFrameShadow(QFrame.Sunken)
-        self.content_layout.addWidget(line)
-
-        # Programs / Game Shortcuts Section [FR-22, FR-24]
-        programs_header_layout = QHBoxLayout()
-        programs_title = QLabel("Programs & Game Shortcuts")
-        p_font = QFont()
-        p_font.setBold(True)
-        programs_title.setFont(p_font)
-        programs_header_layout.addWidget(programs_title)
-
-        programs_header_layout.addStretch()
         self.btn_add_prog = QPushButton("+ Add Shortcut")
-        self.btn_add_prog.setEnabled(False)
         self.btn_add_prog.clicked.connect(self._add_program_dialog)
-        programs_header_layout.addWidget(self.btn_add_prog)
-        self.content_layout.addLayout(programs_header_layout)
+        prog_top_row.addWidget(self.btn_add_prog)
+        tab_programs_layout.addLayout(prog_top_row)
 
         self.programs_table = QTableWidget()
         self.programs_table.setColumnCount(3)
@@ -343,57 +277,82 @@ class MainWindow(QMainWindow):
         self.programs_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.programs_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.programs_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.programs_table.setMaximumHeight(180)
-        self.content_layout.addWidget(self.programs_table)
+        tab_programs_layout.addWidget(self.programs_table)
 
-        # Configuration Quick Toggles
-        self.toggles_box = QWidget()
-        toggles_layout = QVBoxLayout(self.toggles_box)
-        toggles_layout.setContentsMargins(0, 4, 0, 4)
+        self.tab_widget.addTab(tab_programs, "Programs")
 
-        toggles_title = QLabel("Graphics & Engine Settings")
-        t_font = QFont()
-        t_font.setBold(True)
-        toggles_title.setFont(t_font)
-        toggles_layout.addWidget(toggles_title)
+        # ============================================================
+        # TAB 2: Configuration & Settings [FR-05, FR-06, FR-12 to FR-16]
+        # ============================================================
+        tab_config = QWidget()
+        tab_config_layout = QVBoxLayout(tab_config)
+        tab_config_layout.setContentsMargins(16, 16, 16, 16)
+        tab_config_layout.setSpacing(14)
 
-        runner_row = QHBoxLayout()
-        runner_row.addWidget(QLabel("Assigned Runner:"))
+        # Group 1: Runtime & Version
+        grp_runner = QGroupBox("Environment && Runtime")
+        grp_runner_layout = QFormLayout(grp_runner)
+        grp_runner_layout.setContentsMargins(14, 16, 14, 14)
+        grp_runner_layout.setSpacing(10)
+
+        runner_pick_row = QHBoxLayout()
         self.runner_combo = QComboBox()
+        self.runner_combo.setMinimumWidth(280)
         self.runner_combo.currentIndexChanged.connect(self._on_runner_changed)
-        runner_row.addWidget(self.runner_combo)
-        runner_row.addStretch()
-        toggles_layout.addLayout(runner_row)
+        runner_pick_row.addWidget(self.runner_combo)
+        btn_manage_r = QPushButton("Manage Runners...")
+        btn_manage_r.clicked.connect(self._open_runners_dialog)
+        runner_pick_row.addWidget(btn_manage_r)
+        runner_pick_row.addStretch()
+        grp_runner_layout.addRow("Assigned Wine/GPTK Runner:", runner_pick_row)
 
-        self.chk_msync = QCheckBox("MSync (Darwin Mach Semaphore Synchronization)")
+        self.win_ver_combo = QComboBox()
+        self.win_ver_combo.setMinimumWidth(280)
+        self.win_ver_combo.addItem("Windows 10 (Standard 64-bit)", WindowsVersion.WIN10)
+        self.win_ver_combo.addItem("Windows 11 (Modern x64)", WindowsVersion.WIN11)
+        self.win_ver_combo.addItem("Windows 7 (Legacy Compatibility)", WindowsVersion.WIN7)
+        self.win_ver_combo.currentIndexChanged.connect(self._on_win_ver_changed)
+        grp_runner_layout.addRow("Reported Windows Version:", self.win_ver_combo)
+
+        tab_config_layout.addWidget(grp_runner)
+
+        # Group 2: Graphics Translation & Performance
+        grp_graphics = QGroupBox("Graphics Translation && Performance")
+        grp_graphics_layout = QVBoxLayout(grp_graphics)
+        grp_graphics_layout.setContentsMargins(14, 16, 14, 14)
+        grp_graphics_layout.setSpacing(12)
+
+        self.chk_msync = QCheckBox("MSync — Darwin Mach Semaphore Synchronization (Eliminates Wineserver lock contention)")
         self.chk_msync.stateChanged.connect(self._update_settings)
-        toggles_layout.addWidget(self.chk_msync)
+        grp_graphics_layout.addWidget(self.chk_msync)
 
-        self.chk_metal_hud = QCheckBox("Apple Metal Performance HUD (MTL_HUD_ENABLED)")
+        self.chk_metal_hud = QCheckBox("Apple Metal Performance HUD (Live FPS, frametimes, memory && draw calls overlay)")
         self.chk_metal_hud.stateChanged.connect(self._update_settings)
-        toggles_layout.addWidget(self.chk_metal_hud)
+        grp_graphics_layout.addWidget(self.chk_metal_hud)
 
-        self.chk_retina = QCheckBox("Retina High-DPI Resolution Mode")
+        self.chk_retina = QCheckBox("Retina High-DPI Resolution Mode (Renders at native macOS pixel density)")
         self.chk_retina.stateChanged.connect(self._update_settings)
-        toggles_layout.addWidget(self.chk_retina)
+        grp_graphics_layout.addWidget(self.chk_retina)
 
-        # Virtual Desktop row [FR-16]
+        # Virtual Desktop row
         vd_row = QHBoxLayout()
-        self.chk_virtual_desktop = QCheckBox("Emulate Virtual Desktop:")
+        self.chk_virtual_desktop = QCheckBox("Emulate Virtual Desktop Container:")
         self.chk_virtual_desktop.stateChanged.connect(self._update_settings)
         vd_row.addWidget(self.chk_virtual_desktop)
 
         self.res_combo = QComboBox()
+        self.res_combo.setMinimumWidth(140)
         self.res_combo.addItems(["1920x1080", "2560x1440", "3840x2160", "1440x900", "1280x720"])
         self.res_combo.currentIndexChanged.connect(self._update_settings)
         vd_row.addWidget(self.res_combo)
         vd_row.addStretch()
-        toggles_layout.addLayout(vd_row)
+        grp_graphics_layout.addLayout(vd_row)
 
-        # DXVK HUD row [FR-05]
+        # DXVK HUD row
         hud_row = QHBoxLayout()
-        hud_row.addWidget(QLabel("DXVK Overlay HUD:"))
+        hud_row.addWidget(QLabel("DXVK Diagnostics Overlay HUD:"))
         self.dxvk_hud_combo = QComboBox()
+        self.dxvk_hud_combo.setMinimumWidth(260)
         self.dxvk_hud_combo.addItem("Disabled", "")
         self.dxvk_hud_combo.addItem("FPS Only", "fps")
         self.dxvk_hud_combo.addItem("Standard (FPS + Dev Info)", "fps,devinfo")
@@ -401,11 +360,120 @@ class MainWindow(QMainWindow):
         self.dxvk_hud_combo.currentIndexChanged.connect(self._update_settings)
         hud_row.addWidget(self.dxvk_hud_combo)
         hud_row.addStretch()
-        toggles_layout.addLayout(hud_row)
+        grp_graphics_layout.addLayout(hud_row)
 
-        self.content_layout.addWidget(self.toggles_box)
-        self.content_layout.addStretch()
+        tab_config_layout.addWidget(grp_graphics)
+        tab_config_layout.addStretch()
 
+        self.tab_widget.addTab(tab_config, "Configuration")
+
+        # ============================================================
+        # TAB 3: Tools & Stores [FR-09, FR-18, FR-20, FR-26 to FR-32]
+        # ============================================================
+        tab_tools = QWidget()
+        tab_tools_layout = QVBoxLayout(tab_tools)
+        tab_tools_layout.setContentsMargins(16, 16, 16, 16)
+        tab_tools_layout.setSpacing(14)
+
+        tools_desc = QLabel("Wine utilities, store client installers, and diagnostic tools for this bottle:")
+        tools_desc.setStyleSheet("color: #5C5C60; font-size: 13px;")
+        tab_tools_layout.addWidget(tools_desc)
+
+        tools_grid = QGridLayout()
+        tools_grid.setSpacing(12)
+
+        self.btn_install_store = QPushButton("  Install Game Store (Steam, Epic, GOG)")
+        self.btn_install_store.setObjectName("utilityBtn")
+        self.btn_install_store.clicked.connect(self._open_store_installer)
+        tools_grid.addWidget(self.btn_install_store, 0, 0)
+
+        self.btn_dependencies = QPushButton("  Dependencies (DirectX, VC++ Runtimes)")
+        self.btn_dependencies.setObjectName("utilityBtn")
+        self.btn_dependencies.clicked.connect(self._open_dependencies_dialog)
+        tools_grid.addWidget(self.btn_dependencies, 0, 1)
+
+        self.btn_winecfg = QPushButton("  Wine Configuration (winecfg)")
+        self.btn_winecfg.setObjectName("utilityBtn")
+        self.btn_winecfg.clicked.connect(self._launch_winecfg)
+        tools_grid.addWidget(self.btn_winecfg, 1, 0)
+
+        self.btn_regedit = QPushButton("  Registry Editor (regedit)")
+        self.btn_regedit.setObjectName("utilityBtn")
+        self.btn_regedit.clicked.connect(self._launch_regedit)
+        tools_grid.addWidget(self.btn_regedit, 1, 1)
+
+        self.btn_terminal = QPushButton("  Wine Command Prompt (cmd.exe)")
+        self.btn_terminal.setObjectName("utilityBtn")
+        self.btn_terminal.clicked.connect(self._launch_terminal)
+        tools_grid.addWidget(self.btn_terminal, 2, 0)
+
+        self.btn_dll_overrides = QPushButton("  DLL Overrides Configuration")
+        self.btn_dll_overrides.setObjectName("utilityBtn")
+        self.btn_dll_overrides.clicked.connect(self._open_dll_overrides)
+        tools_grid.addWidget(self.btn_dll_overrides, 2, 1)
+
+        self.btn_task_mgr = QPushButton("  Task Manager && Process Inspector")
+        self.btn_task_mgr.setObjectName("utilityBtn")
+        self.btn_task_mgr.clicked.connect(self._open_task_manager)
+        tools_grid.addWidget(self.btn_task_mgr, 3, 0)
+
+        self.btn_logs = QPushButton("  Live Diagnostic Logs Streamer")
+        self.btn_logs.setObjectName("utilityBtn")
+        self.btn_logs.clicked.connect(self._open_log_viewer)
+        tools_grid.addWidget(self.btn_logs, 3, 1)
+
+        tab_tools_layout.addLayout(tools_grid)
+        tab_tools_layout.addStretch()
+
+        self.tab_widget.addTab(tab_tools, "Tools && Stores")
+
+        # ============================================================
+        # TAB 4: Maintenance & Backups [FR-03, FR-04, FR-05, FR-33 to FR-36]
+        # ============================================================
+        tab_maint = QWidget()
+        tab_maint_layout = QVBoxLayout(tab_maint)
+        tab_maint_layout.setContentsMargins(16, 16, 16, 16)
+        tab_maint_layout.setSpacing(14)
+
+        maint_desc = QLabel("Backup, duplicate, reset, or export this bottle prefix:")
+        maint_desc.setStyleSheet("color: #5C5C60; font-size: 13px;")
+        tab_maint_layout.addWidget(maint_desc)
+
+        maint_grid = QGridLayout()
+        maint_grid.setSpacing(12)
+
+        self.btn_snapshots = QPushButton("  Snapshots && Rollback (Point-in-Time)")
+        self.btn_snapshots.setObjectName("utilityBtn")
+        self.btn_snapshots.clicked.connect(self._open_snapshots_dialog)
+        maint_grid.addWidget(self.btn_snapshots, 0, 0)
+
+        self.btn_export = QPushButton("  Export Bottle Archive (.tar.gz / .zip)")
+        self.btn_export.setObjectName("utilityBtn")
+        self.btn_export.clicked.connect(self._export_bottle_dialog)
+        maint_grid.addWidget(self.btn_export, 0, 1)
+
+        self.btn_clone = QPushButton("  Clone Bottle (Duplicate Prefix)")
+        self.btn_clone.setObjectName("utilityBtn")
+        self.btn_clone.clicked.connect(self._duplicate_bottle_dialog)
+        maint_grid.addWidget(self.btn_clone, 1, 0)
+
+        self.btn_reset = QPushButton("  Reset Prefix to Vanilla State")
+        self.btn_reset.setObjectName("utilityBtn")
+        self.btn_reset.setToolTip("Restores vanilla registry hives and clears temporary Wine caches")
+        self.btn_reset.clicked.connect(self._reset_bottle_dialog)
+        maint_grid.addWidget(self.btn_reset, 1, 1)
+
+        self.btn_delete = QPushButton("  Delete Bottle Permanently")
+        self.btn_delete.setObjectName("dangerAction")
+        self.btn_delete.clicked.connect(self._delete_bottle_dialog)
+        maint_grid.addWidget(self.btn_delete, 2, 0)
+
+        tab_maint_layout.addLayout(maint_grid)
+        tab_maint_layout.addStretch()
+
+        self.tab_widget.addTab(tab_maint, "Maintenance")
+
+        self.content_layout.addWidget(self.tab_widget)
         main_layout.addWidget(self.content_area)
 
         # Global macOS Keybindings [SRS Section 5.1]
@@ -431,22 +499,8 @@ class MainWindow(QMainWindow):
         self.bottle_title.setText("No Bottles Configured")
         self.btn_run_exe.setEnabled(False)
         self.btn_open_drive.setEnabled(False)
-        self.btn_dependencies.setEnabled(False)
-        self.btn_install_store.setEnabled(False)
-        self.btn_task_mgr.setEnabled(False)
-        self.btn_logs.setEnabled(False)
-        self.btn_snapshots.setEnabled(False)
-        self.btn_export.setEnabled(False)
-        self.btn_dll_overrides.setEnabled(False)
-        self.btn_winecfg.setEnabled(False)
-        self.btn_regedit.setEnabled(False)
-        self.btn_terminal.setEnabled(False)
-        self.btn_clone.setEnabled(False)
-        self.btn_reset.setEnabled(False)
-        self.btn_delete.setEnabled(False)
-        self.btn_add_prog.setEnabled(False)
         self.btn_stop.setEnabled(False)
-        self.toggles_box.setEnabled(False)
+        self.tab_widget.setEnabled(False)
         self.programs_table.setRowCount(0)
 
     def _on_bottle_selected(self, current: Optional[QListWidgetItem]):
@@ -463,22 +517,8 @@ class MainWindow(QMainWindow):
         self.bottle_title.setText(bottle.name)
         self.btn_run_exe.setEnabled(True)
         self.btn_open_drive.setEnabled(True)
-        self.btn_dependencies.setEnabled(True)
-        self.btn_install_store.setEnabled(True)
-        self.btn_task_mgr.setEnabled(True)
-        self.btn_logs.setEnabled(True)
-        self.btn_snapshots.setEnabled(True)
-        self.btn_export.setEnabled(True)
-        self.btn_dll_overrides.setEnabled(True)
-        self.btn_winecfg.setEnabled(True)
-        self.btn_regedit.setEnabled(True)
-        self.btn_terminal.setEnabled(True)
-        self.btn_clone.setEnabled(True)
-        self.btn_reset.setEnabled(True)
-        self.btn_delete.setEnabled(True)
-        self.btn_add_prog.setEnabled(True)
         self.btn_stop.setEnabled(True)
-        self.toggles_box.setEnabled(True)
+        self.tab_widget.setEnabled(True)
 
         # Populate available runners [FR-09]
         self.runner_combo.blockSignals(True)
@@ -490,6 +530,13 @@ class MainWindow(QMainWindow):
             if r.id == bottle.runner_id:
                 self.runner_combo.setCurrentIndex(self.runner_combo.count() - 1)
         self.runner_combo.blockSignals(False)
+
+        # Reported Windows Version [FR-06]
+        self.win_ver_combo.blockSignals(True)
+        idx_ver = self.win_ver_combo.findData(bottle.windows_version)
+        if idx_ver >= 0:
+            self.win_ver_combo.setCurrentIndex(idx_ver)
+        self.win_ver_combo.blockSignals(False)
 
         # Performance and environment toggles [FR-05, FR-13, FR-14, FR-16]
         self.chk_msync.blockSignals(True)
@@ -523,6 +570,13 @@ class MainWindow(QMainWindow):
         self.dxvk_hud_combo.blockSignals(False)
 
         self._load_programs()
+
+    def _on_win_ver_changed(self):
+        if not self.current_bottle:
+            return
+        selected_ver = self.win_ver_combo.currentData()
+        if selected_ver and selected_ver != self.current_bottle.windows_version:
+            WineToolsManager.set_windows_version(self.current_bottle, selected_ver)
 
     def _load_programs(self):
         if not self.current_bottle:
