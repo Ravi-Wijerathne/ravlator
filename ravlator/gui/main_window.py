@@ -27,12 +27,15 @@ from ravlator.core.runner import RunnerManager
 from ravlator.core.process import WineEnvironmentBuilder, WineProcessManager
 from ravlator.core.shortcuts import ShortcutManager
 from ravlator.core.telemetry import ProcessTelemetry
+from ravlator.core.snapshots import SnapshotManager
+from ravlator.core.portability import PortabilityManager
 from ravlator.gui.utils.icons import get_icon
 from ravlator.gui.views.dependencies_dialog import DependenciesDialog
 from ravlator.gui.views.runners_dialog import RunnersDialog
 from ravlator.gui.views.store_installer_dialog import StoreInstallerDialog
 from ravlator.gui.views.task_manager_dialog import TaskManagerDialog
 from ravlator.gui.views.log_viewer_dialog import LogViewerDialog
+from ravlator.gui.views.snapshots_dialog import SnapshotsDialog
 
 
 class NewBottleDialog(QDialog):
@@ -181,6 +184,10 @@ class MainWindow(QMainWindow):
         runners_btn.clicked.connect(self._open_runners_dialog)
         sidebar_layout.addWidget(runners_btn)
 
+        import_btn = QPushButton(" Import Bottle...")
+        import_btn.clicked.connect(self._import_bottle_dialog)
+        sidebar_layout.addWidget(import_btn)
+
         main_layout.addWidget(sidebar)
 
         # Right Content View
@@ -241,6 +248,27 @@ class MainWindow(QMainWindow):
         self.btn_logs.setEnabled(False)
         self.btn_logs.clicked.connect(self._open_log_viewer)
         tools_layout.addWidget(self.btn_logs)
+
+        self.btn_snapshots = QPushButton(" Snapshots")
+        self.btn_snapshots.setEnabled(False)
+        self.btn_snapshots.clicked.connect(self._open_snapshots_dialog)
+        tools_layout.addWidget(self.btn_snapshots)
+
+        self.btn_export = QPushButton(" Export...")
+        self.btn_export.setEnabled(False)
+        self.btn_export.clicked.connect(self._export_bottle_dialog)
+        tools_layout.addWidget(self.btn_export)
+
+        self.btn_clone = QPushButton(" Clone")
+        self.btn_clone.setEnabled(False)
+        self.btn_clone.clicked.connect(self._duplicate_bottle_dialog)
+        tools_layout.addWidget(self.btn_clone)
+
+        self.btn_delete = QPushButton(" Delete")
+        self.btn_delete.setEnabled(False)
+        self.btn_delete.setStyleSheet("color: #FF3B30;")
+        self.btn_delete.clicked.connect(self._delete_bottle_dialog)
+        tools_layout.addWidget(self.btn_delete)
 
         tools_layout.addStretch()
         self.content_layout.addLayout(tools_layout)
@@ -335,6 +363,10 @@ class MainWindow(QMainWindow):
         self.btn_install_store.setEnabled(False)
         self.btn_task_mgr.setEnabled(False)
         self.btn_logs.setEnabled(False)
+        self.btn_snapshots.setEnabled(False)
+        self.btn_export.setEnabled(False)
+        self.btn_clone.setEnabled(False)
+        self.btn_delete.setEnabled(False)
         self.btn_add_prog.setEnabled(False)
         self.btn_stop.setEnabled(False)
         self.toggles_box.setEnabled(False)
@@ -358,6 +390,10 @@ class MainWindow(QMainWindow):
         self.btn_install_store.setEnabled(True)
         self.btn_task_mgr.setEnabled(True)
         self.btn_logs.setEnabled(True)
+        self.btn_snapshots.setEnabled(True)
+        self.btn_export.setEnabled(True)
+        self.btn_clone.setEnabled(True)
+        self.btn_delete.setEnabled(True)
         self.btn_add_prog.setEnabled(True)
         self.btn_stop.setEnabled(True)
         self.toggles_box.setEnabled(True)
@@ -589,3 +625,95 @@ class MainWindow(QMainWindow):
             return
         dialog = LogViewerDialog(self.current_bottle, self)
         dialog.exec()
+
+    def _open_snapshots_dialog(self):
+        if not self.current_bottle:
+            return
+        dialog = SnapshotsDialog(self.current_bottle, self)
+        dialog.exec()
+        fresh = BottleManager.get_bottle(self.current_bottle.id)
+        if fresh and self.bottle_list.currentItem():
+            self._on_bottle_selected(self.bottle_list.currentItem())
+
+    def _export_bottle_dialog(self):
+        if not self.current_bottle:
+            return
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Bottle Archive",
+            f"{self.current_bottle.id}_export.tar.gz",
+            "Compressed Archives (*.tar.gz *.zip)"
+        )
+        if not file_path:
+            return
+        fmt = "zip" if file_path.endswith(".zip") else "tar.gz"
+        try:
+            out_path = PortabilityManager.export_bottle(
+                bottle_id=self.current_bottle.id,
+                dest_path=Path(file_path),
+                format=fmt
+            )
+            QMessageBox.information(self, "Export Complete", f"Bottle successfully exported to:\n{out_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Failed", str(e))
+
+    def _import_bottle_dialog(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Bottle Archive to Import",
+            str(Path.home()),
+            "Supported Archives (*.tar.gz *.tar.xz *.zip)"
+        )
+        if not file_path:
+            return
+        name, ok = QInputDialog.getText(
+            self,
+            "Import Bottle Name",
+            "Optional bottle name (leave empty to use archive name):"
+        )
+        try:
+            imported = PortabilityManager.import_bottle(
+                archive_path=Path(file_path),
+                custom_name=name.strip() if ok and name.strip() else None
+            )
+            QMessageBox.information(self, "Import Complete", f"Imported bottle '{imported.name}' successfully!")
+            self._load_bottles()
+            for i in range(self.bottle_list.count()):
+                item = self.bottle_list.item(i)
+                if item.data(Qt.UserRole) == imported.id:
+                    self.bottle_list.setCurrentItem(item)
+                    break
+        except Exception as e:
+            QMessageBox.critical(self, "Import Failed", str(e))
+
+    def _duplicate_bottle_dialog(self):
+        if not self.current_bottle:
+            return
+        new_name, ok = QInputDialog.getText(
+            self,
+            "Clone Bottle",
+            f"Enter name for cloned copy of '{self.current_bottle.name}':",
+            text=f"{self.current_bottle.name} (Copy)"
+        )
+        if not ok or not new_name.strip():
+            return
+        try:
+            cloned = BottleManager.duplicate_bottle(self.current_bottle.id, new_name.strip())
+            QMessageBox.information(self, "Cloned", f"Bottle cloned as '{cloned.name}'.")
+            self._load_bottles()
+        except Exception as e:
+            QMessageBox.critical(self, "Clone Failed", str(e))
+
+    def _delete_bottle_dialog(self):
+        if not self.current_bottle:
+            return
+        confirm = QMessageBox.question(
+            self,
+            "Confirm Deletion",
+            f"Are you sure you want to permanently delete bottle '{self.current_bottle.name}'?\n"
+            "This will delete all installed games, saves, and registry hives inside this prefix.",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if confirm == QMessageBox.Yes:
+            BottleManager.delete_bottle(self.current_bottle.id)
+            self._load_bottles()

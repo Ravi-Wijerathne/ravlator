@@ -1,7 +1,7 @@
 """
-[FR-25] Ravlator Headless CLI Interface.
+[FR-25, FR-33, FR-34, FR-35, FR-36] Ravlator Headless CLI Interface.
 Enables full prefix lifecycle, runner downloads, dependency installation,
-store client deployment, process telemetry, and Wine execution directly from the terminal.
+store client deployment, process telemetry, snapshots, export/import, and Wine execution directly from the terminal.
 """
 
 import argparse
@@ -14,7 +14,9 @@ from ravlator.core.downloader import DownloadProgress
 from ravlator.core.models import PresetType, WindowsVersion, ProgramEntry
 from ravlator.core.runner import RunnerManager
 from ravlator.core.process import WineEnvironmentBuilder, WineProcessManager
+from ravlator.core.portability import PortabilityManager
 from ravlator.core.shortcuts import ShortcutManager
+from ravlator.core.snapshots import SnapshotManager
 from ravlator.core.stores import StoreManager
 from ravlator.core.telemetry import ProcessTelemetry
 
@@ -85,6 +87,32 @@ def main():
     shortcut_parser.add_argument("--exe", required=True, type=str, help="Path to Windows executable")
     shortcut_parser.add_argument("--name", type=str, help="Custom application name")
     shortcut_parser.add_argument("--out", type=str, help="Output directory (default: ~/Desktop)")
+
+    # Command: snapshot-create [FR-33]
+    sc_parser = subparsers.add_parser("snapshot-create", help="Create a point-in-time snapshot of a bottle")
+    sc_parser.add_argument("--bottle", required=True, type=str, help="Target bottle ID")
+    sc_parser.add_argument("--name", required=True, type=str, help="Snapshot name")
+    sc_parser.add_argument("--desc", type=str, default="", help="Snapshot description")
+
+    # Command: snapshot-list [FR-33]
+    sl_parser = subparsers.add_parser("snapshot-list", help="List snapshots for a bottle")
+    sl_parser.add_argument("--bottle", required=True, type=str, help="Target bottle ID")
+
+    # Command: snapshot-restore [FR-34]
+    sr_parser = subparsers.add_parser("snapshot-restore", help="Rollback bottle state to a snapshot")
+    sr_parser.add_argument("--bottle", required=True, type=str, help="Target bottle ID")
+    sr_parser.add_argument("--snapshot", required=True, type=str, help="Snapshot ID to restore")
+
+    # Command: export-bottle [FR-35]
+    exp_parser = subparsers.add_parser("export-bottle", help="Export a bottle as a portable archive")
+    exp_parser.add_argument("--bottle", required=True, type=str, help="Target bottle ID")
+    exp_parser.add_argument("--out", type=str, help="Output path (e.g. ~/Downloads/my_bottle.tar.gz)")
+    exp_parser.add_argument("--format", choices=["tar.gz", "zip"], default="tar.gz", help="Archive format")
+
+    # Command: import-bottle [FR-36]
+    imp_parser = subparsers.add_parser("import-bottle", help="Import a bottle from a portable archive")
+    imp_parser.add_argument("--archive", required=True, type=str, help="Path to archive (.tar.gz or .zip)")
+    imp_parser.add_argument("--name", type=str, help="Custom name for imported bottle")
 
     # Command: ps [FR-29]
     ps_parser = subparsers.add_parser("ps", help="List active processes for a bottle")
@@ -189,6 +217,34 @@ def main():
         )
         bundle = ShortcutManager.create_macos_app(bottle, dummy_prog, output_dir=out_path)
         print(f"[+] Standalone macOS .app generated at: {bundle}")
+
+    elif args.command == "snapshot-create":
+        snap = SnapshotManager.create_snapshot(args.bottle, args.name, args.desc)
+        print(f"[+] Created snapshot '{snap.name}' (ID: {snap.id})")
+
+    elif args.command == "snapshot-list":
+        snaps = SnapshotManager.list_snapshots(args.bottle)
+        if not snaps:
+            print(f"No snapshots found for bottle '{args.bottle}'.")
+            return
+        print(f"{'SNAPSHOT ID':<20} {'NAME':<25} {'CREATED':<20} {'DESCRIPTION'}")
+        print("-" * 80)
+        for s in snaps:
+            print(f"{s.id:<20} {s.name:<25} {s.created_at[:19]:<20} {s.description}")
+
+    elif args.command == "snapshot-restore":
+        SnapshotManager.rollback_snapshot(args.bottle, args.snapshot)
+        print(f"[+] Successfully restored bottle '{args.bottle}' to snapshot '{args.snapshot}'.")
+
+    elif args.command == "export-bottle":
+        out_p = Path(args.out).resolve() if args.out else None
+        res = PortabilityManager.export_bottle(args.bottle, dest_path=out_p, format=args.format)
+        print(f"[+] Exported bottle '{args.bottle}' to: {res}")
+
+    elif args.command == "import-bottle":
+        archive_p = Path(args.archive).resolve()
+        imported = PortabilityManager.import_bottle(archive_p, custom_name=args.name)
+        print(f"[+] Successfully imported bottle '{imported.name}' (ID: {imported.id})")
 
     elif args.command == "ps":
         procs = ProcessTelemetry.list_bottle_processes(args.bottle)
