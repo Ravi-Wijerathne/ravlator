@@ -80,6 +80,18 @@ class StoreInstallerDialog(QDialog):
         self.progress_bar.setVisible(False)
         layout.addWidget(self.progress_bar)
 
+        # Steam Login Sync Action [SRS Section 8.2, Appendix B]
+        steam_box = QHBoxLayout()
+        sync_label = QLabel("Already logged in to Steam on Mac?")
+        steam_box.addWidget(sync_label)
+        steam_box.addStretch()
+
+        btn_sync = QPushButton("Sync macOS Steam Login Cache")
+        btn_sync.setToolTip("Copies native Steam login session tokens to bypass CEF black-screens")
+        btn_sync.clicked.connect(self._sync_steam_login)
+        steam_box.addWidget(btn_sync)
+        layout.addLayout(steam_box)
+
     def _load_stores(self):
         stores = StoreManager.list_supported_stores()
         self.table.setRowCount(len(stores))
@@ -122,3 +134,18 @@ class StoreInstallerDialog(QDialog):
             self._load_stores()
         else:
             QMessageBox.critical(self, "Installation Failed", message)
+
+    def _sync_steam_login(self):
+        try:
+            copied = StoreManager.sync_native_steam_login(self.bottle)
+            if copied:
+                QMessageBox.information(
+                    self,
+                    "Steam Login Cache Synced",
+                    "Successfully transferred native macOS Steam credentials and session tokens!\n"
+                    "Steam will now log in automatically without CEF web login prompts."
+                )
+            else:
+                QMessageBox.warning(self, "Sync Notice", "No active native Steam credentials found to copy.")
+        except Exception as e:
+            QMessageBox.critical(self, "Sync Error", str(e))

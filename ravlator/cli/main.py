@@ -127,6 +127,10 @@ def main():
     kill_parser = subparsers.add_parser("kill-bottle", help="Force terminate wineserver for a bottle")
     kill_parser.add_argument("name", type=str, help="ID of the bottle")
 
+    # Command: reset-bottle [FR-05]
+    reset_parser = subparsers.add_parser("reset-bottle", help="Reset bottle registry and caches to vanilla state")
+    reset_parser.add_argument("--bottle", required=True, type=str, help="Target bottle ID")
+
     # Command: run
     run_parser = subparsers.add_parser("run", help="Execute a Windows binary inside a bottle")
     run_parser.add_argument("--bottle", required=True, type=str, help="Target bottle ID")
@@ -269,6 +273,14 @@ def main():
         WineProcessManager.force_kill_bottle(bottle, runner_dir)
         print(f"[+] Wineserver terminated for bottle '{bottle.name}'")
 
+    elif args.command == "reset-bottle":
+        print(f"[*] Resetting bottle '{args.bottle}'...")
+        try:
+            BottleManager.reset_bottle(args.bottle)
+            print(f"[+] Successfully reset bottle '{args.bottle}' to vanilla state.")
+        except Exception as e:
+            print(f"[-] Reset failed: {e}")
+
     elif args.command == "run":
         bottle = BottleManager.get_bottle(args.bottle)
         if not bottle:
@@ -277,11 +289,11 @@ def main():
         
         runner_dir = RunnerManager.get_runner_dir(bottle.runner_id)
         env = WineEnvironmentBuilder.build_env(bottle, runner_dir)
-        final_args = WineProcessManager.inject_steam_cef_workaround(args.exe, args.args or [])
+        full_command = WineProcessManager.build_launch_command(runner_dir, bottle, args.exe, args.args or [])
         
         print(f"[*] Launching '{args.exe}' inside bottle '{bottle.name}'...")
-        print(f"    MSync: {bottle.msync} | Metal HUD: {bottle.metal_hud} | Retina: {bottle.retina}")
-        print(f"    Arguments: {final_args}")
+        print(f"    MSync: {bottle.msync} | Metal HUD: {bottle.metal_hud} | Retina: {bottle.retina} | Virtual Desktop: {bottle.virtual_desktop}")
+        print(f"    Command: {' '.join(full_command)}")
         print("[+] Environment successfully prepared.")
 
 

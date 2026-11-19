@@ -61,6 +61,10 @@ class BottleConfig(BaseModel):
     dxvk_hud: str = ""
     wine_debug: str = "fixme-all"
     
+    # Virtual Desktop & Resolution [FR-16]
+    virtual_desktop: bool = False
+    virtual_desktop_res: str = "1920x1080"
+    
     # DLL Overrides [FR-09]
     dll_overrides: Dict[str, str] = Field(default_factory=lambda: {
         "d3d11": "native,builtin",

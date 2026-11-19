@@ -12,7 +12,7 @@ from typing import Optional
 import uuid
 
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QAction, QColor, QFont
+from PySide6.QtGui import QAction, QColor, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QListWidget, QListWidgetItem,
     QLabel, QPushButton, QFileDialog, QMessageBox, QFrame, QScrollArea,
@@ -41,6 +41,7 @@ from ravlator.gui.views.log_viewer_dialog import LogViewerDialog
 from ravlator.gui.views.snapshots_dialog import SnapshotsDialog
 from ravlator.gui.views.dll_overrides_dialog import DllOverridesDialog
 from ravlator.gui.views.diagnostics_dialog import DiagnosticsDialog
+from ravlator.gui.views.settings_dialog import SettingsDialog
 
 
 class NewBottleDialog(QDialog):
@@ -197,6 +198,11 @@ class MainWindow(QMainWindow):
         diag_btn.clicked.connect(self._open_diagnostics_dialog)
         sidebar_layout.addWidget(diag_btn)
 
+        pref_btn = QPushButton(" Preferences")
+        pref_btn.setIcon(get_icon("settings"))
+        pref_btn.clicked.connect(self._open_settings_dialog)
+        sidebar_layout.addWidget(pref_btn)
+
         main_layout.addWidget(sidebar)
 
         # Right Content View
@@ -293,6 +299,12 @@ class MainWindow(QMainWindow):
         self.btn_clone.clicked.connect(self._duplicate_bottle_dialog)
         tools_layout.addWidget(self.btn_clone)
 
+        self.btn_reset = QPushButton(" Reset")
+        self.btn_reset.setEnabled(False)
+        self.btn_reset.setToolTip("Restores vanilla registry hives and clears temporary Wine caches")
+        self.btn_reset.clicked.connect(self._reset_bottle_dialog)
+        tools_layout.addWidget(self.btn_reset)
+
         self.btn_delete = QPushButton(" Delete")
         self.btn_delete.setEnabled(False)
         self.btn_delete.setStyleSheet("color: #FF3B30;")
@@ -365,10 +377,41 @@ class MainWindow(QMainWindow):
         self.chk_retina.stateChanged.connect(self._update_settings)
         toggles_layout.addWidget(self.chk_retina)
 
+        # Virtual Desktop row [FR-16]
+        vd_row = QHBoxLayout()
+        self.chk_virtual_desktop = QCheckBox("Emulate Virtual Desktop:")
+        self.chk_virtual_desktop.stateChanged.connect(self._update_settings)
+        vd_row.addWidget(self.chk_virtual_desktop)
+
+        self.res_combo = QComboBox()
+        self.res_combo.addItems(["1920x1080", "2560x1440", "3840x2160", "1440x900", "1280x720"])
+        self.res_combo.currentIndexChanged.connect(self._update_settings)
+        vd_row.addWidget(self.res_combo)
+        vd_row.addStretch()
+        toggles_layout.addLayout(vd_row)
+
+        # DXVK HUD row [FR-05]
+        hud_row = QHBoxLayout()
+        hud_row.addWidget(QLabel("DXVK Overlay HUD:"))
+        self.dxvk_hud_combo = QComboBox()
+        self.dxvk_hud_combo.addItem("Disabled", "")
+        self.dxvk_hud_combo.addItem("FPS Only", "fps")
+        self.dxvk_hud_combo.addItem("Standard (FPS + Dev Info)", "fps,devinfo")
+        self.dxvk_hud_combo.addItem("Full Diagnostics", "fps,frametimes,memory,devinfo,drawcalls")
+        self.dxvk_hud_combo.currentIndexChanged.connect(self._update_settings)
+        hud_row.addWidget(self.dxvk_hud_combo)
+        hud_row.addStretch()
+        toggles_layout.addLayout(hud_row)
+
         self.content_layout.addWidget(self.toggles_box)
         self.content_layout.addStretch()
 
         main_layout.addWidget(self.content_area)
+
+        # Global macOS Keybindings [SRS Section 5.1]
+        QShortcut(QKeySequence.Preferences, self, self._open_settings_dialog)
+        QShortcut(QKeySequence("Ctrl+N"), self, self._create_bottle_dialog)
+        QShortcut(QKeySequence("Ctrl+W"), self, self.close)
 
     def _load_bottles(self):
         self.bottle_list.clear()
@@ -399,6 +442,7 @@ class MainWindow(QMainWindow):
         self.btn_regedit.setEnabled(False)
         self.btn_terminal.setEnabled(False)
         self.btn_clone.setEnabled(False)
+        self.btn_reset.setEnabled(False)
         self.btn_delete.setEnabled(False)
         self.btn_add_prog.setEnabled(False)
         self.btn_stop.setEnabled(False)
@@ -430,6 +474,7 @@ class MainWindow(QMainWindow):
         self.btn_regedit.setEnabled(True)
         self.btn_terminal.setEnabled(True)
         self.btn_clone.setEnabled(True)
+        self.btn_reset.setEnabled(True)
         self.btn_delete.setEnabled(True)
         self.btn_add_prog.setEnabled(True)
         self.btn_stop.setEnabled(True)
@@ -446,9 +491,36 @@ class MainWindow(QMainWindow):
                 self.runner_combo.setCurrentIndex(self.runner_combo.count() - 1)
         self.runner_combo.blockSignals(False)
 
+        # Performance and environment toggles [FR-05, FR-13, FR-14, FR-16]
+        self.chk_msync.blockSignals(True)
         self.chk_msync.setChecked(bottle.msync)
+        self.chk_msync.blockSignals(False)
+
+        self.chk_metal_hud.blockSignals(True)
         self.chk_metal_hud.setChecked(bottle.metal_hud)
+        self.chk_metal_hud.blockSignals(False)
+
+        self.chk_retina.blockSignals(True)
         self.chk_retina.setChecked(bottle.retina)
+        self.chk_retina.blockSignals(False)
+
+        self.chk_virtual_desktop.blockSignals(True)
+        self.chk_virtual_desktop.setChecked(bottle.virtual_desktop)
+        self.chk_virtual_desktop.blockSignals(False)
+
+        self.res_combo.blockSignals(True)
+        res_idx = self.res_combo.findText(bottle.virtual_desktop_res)
+        if res_idx >= 0:
+            self.res_combo.setCurrentIndex(res_idx)
+        self.res_combo.blockSignals(False)
+
+        self.dxvk_hud_combo.blockSignals(True)
+        hud_idx = self.dxvk_hud_combo.findData(bottle.dxvk_hud)
+        if hud_idx >= 0:
+            self.dxvk_hud_combo.setCurrentIndex(hud_idx)
+        else:
+            self.dxvk_hud_combo.setCurrentIndex(0)
+        self.dxvk_hud_combo.blockSignals(False)
 
         self._load_programs()
 
@@ -530,12 +602,13 @@ class MainWindow(QMainWindow):
             )
             return
 
-        cmd = [str(wine_bin), program.exe_path]
-        if program.arguments:
-            cmd.extend(program.arguments.split())
-
-        final_args = WineProcessManager.inject_steam_cef_workaround(program.exe_path, cmd[1:])
-        full_command = [cmd[0]] + final_args
+        cmd_args = program.arguments.split() if program.arguments else []
+        full_command = WineProcessManager.build_launch_command(
+            runner_path=runner_dir,
+            bottle=self.current_bottle,
+            exe_path=program.exe_path,
+            args=cmd_args
+        )
 
         # Log launch
         log_file = ProcessTelemetry.get_log_path(self.current_bottle.id)
@@ -598,6 +671,9 @@ class MainWindow(QMainWindow):
         self.current_bottle.msync = self.chk_msync.isChecked()
         self.current_bottle.metal_hud = self.chk_metal_hud.isChecked()
         self.current_bottle.retina = self.chk_retina.isChecked()
+        self.current_bottle.virtual_desktop = self.chk_virtual_desktop.isChecked()
+        self.current_bottle.virtual_desktop_res = self.res_combo.currentText()
+        self.current_bottle.dxvk_hud = self.dxvk_hud_combo.currentData() or ""
         BottleManager.save_bottle_config(self.current_bottle)
 
     def _on_runner_changed(self):
@@ -798,3 +874,30 @@ class MainWindow(QMainWindow):
             WineToolsManager.launch_terminal_cmd(self.current_bottle)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to launch Wine Terminal: {e}")
+
+    def _open_settings_dialog(self):
+        """[Section 3.2, 5.1] Opens the global preferences dialog."""
+        dialog = SettingsDialog(self)
+        dialog.exec()
+
+    def _reset_bottle_dialog(self):
+        """[FR-05] Confirms and resets prefix registry hives and clears temp caches."""
+        if not self.current_bottle:
+            return
+        confirm = QMessageBox.question(
+            self,
+            "Confirm Bottle Reset",
+            f"Are you sure you want to reset prefix '{self.current_bottle.name}'?\n"
+            "This will clear temporary Wine caches and restore vanilla registry hives while strictly preserving installed games and user saves.",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if confirm == QMessageBox.Yes:
+            try:
+                BottleManager.reset_bottle(self.current_bottle.id)
+                QMessageBox.information(
+                    self,
+                    "Reset Complete",
+                    f"Bottle '{self.current_bottle.name}' was successfully reset to vanilla state."
+                )
+            except Exception as e:
+                QMessageBox.critical(self, "Reset Error", str(e))

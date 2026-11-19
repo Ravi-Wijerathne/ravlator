@@ -8,7 +8,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication
 
+from ravlator.core.config import Config
 from ravlator.gui.main_window import MainWindow
+from ravlator.gui.styles import get_stylesheet
 
 
 def main():
@@ -21,6 +23,11 @@ def main():
     # Set default native macOS font hierarchy
     font = QFont("-apple-system", 12)
     app.setFont(font)
+
+    # Load and apply theme palette [SRS Section 5.1]
+    settings = Config.load_global_settings()
+    theme_mode = settings.get("theme_mode", "dark")
+    app.setStyleSheet(get_stylesheet(theme_mode))
 
     window = MainWindow()
     window.show()

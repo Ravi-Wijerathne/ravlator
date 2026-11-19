@@ -150,3 +150,45 @@ class StoreManager:
 
         # 3. Register Program Entry
         return cls.register_store_program(bottle, store_id)
+
+    @classmethod
+    def sync_native_steam_login(cls, bottle: BottleConfig) -> bool:
+        """
+        [SRS Section 8.2, Appendix B] Copies existing authentication tokens, config,
+        and userdata from native macOS Steam to bypass CEF black screens / login errors.
+        """
+        mac_steam_dir = Path.home() / "Library" / "Application Support" / "Steam"
+        if not mac_steam_dir.exists():
+            raise FileNotFoundError(
+                "Native macOS Steam directory was not found.\n"
+                "Please install and log into the Mac Steam app first to populate the login cache."
+            )
+
+        bottle_dir = BottleManager.get_bottle_dir(bottle.id)
+        bottle_steam_dir = bottle_dir / "drive_c" / "Program Files (x86)" / "Steam"
+        bottle_steam_dir.mkdir(parents=True, exist_ok=True)
+
+        import shutil
+        copied_any = False
+
+        # 1. Sync config/ directory (login tokens and user accounts)
+        mac_config = mac_steam_dir / "config"
+        bottle_config = bottle_steam_dir / "config"
+        if mac_config.exists():
+            bottle_config.mkdir(parents=True, exist_ok=True)
+            for item in ["config.vdf", "loginusers.vdf"]:
+                src_file = mac_config / item
+                if src_file.exists():
+                    shutil.copy2(src_file, bottle_config / item)
+                    copied_any = True
+
+        # 2. Sync userdata/ directory
+        mac_userdata = mac_steam_dir / "userdata"
+        bottle_userdata = bottle_steam_dir / "userdata"
+        if mac_userdata.exists():
+            if bottle_userdata.exists():
+                shutil.rmtree(bottle_userdata, ignore_errors=True)
+            shutil.copytree(mac_userdata, bottle_userdata, symlinks=True)
+            copied_any = True
+
+        return copied_any
