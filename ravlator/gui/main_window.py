@@ -29,6 +29,9 @@ from ravlator.core.shortcuts import ShortcutManager
 from ravlator.core.telemetry import ProcessTelemetry
 from ravlator.core.snapshots import SnapshotManager
 from ravlator.core.portability import PortabilityManager
+from ravlator.core.icon_extractor import IconExtractor
+from ravlator.core.diagnostics import DiagnosticsManager
+from ravlator.core.tools import WineToolsManager
 from ravlator.gui.utils.icons import get_icon
 from ravlator.gui.views.dependencies_dialog import DependenciesDialog
 from ravlator.gui.views.runners_dialog import RunnersDialog
@@ -36,6 +39,8 @@ from ravlator.gui.views.store_installer_dialog import StoreInstallerDialog
 from ravlator.gui.views.task_manager_dialog import TaskManagerDialog
 from ravlator.gui.views.log_viewer_dialog import LogViewerDialog
 from ravlator.gui.views.snapshots_dialog import SnapshotsDialog
+from ravlator.gui.views.dll_overrides_dialog import DllOverridesDialog
+from ravlator.gui.views.diagnostics_dialog import DiagnosticsDialog
 
 
 class NewBottleDialog(QDialog):
@@ -188,6 +193,10 @@ class MainWindow(QMainWindow):
         import_btn.clicked.connect(self._import_bottle_dialog)
         sidebar_layout.addWidget(import_btn)
 
+        diag_btn = QPushButton(" Diagnostics")
+        diag_btn.clicked.connect(self._open_diagnostics_dialog)
+        sidebar_layout.addWidget(diag_btn)
+
         main_layout.addWidget(sidebar)
 
         # Right Content View
@@ -258,6 +267,26 @@ class MainWindow(QMainWindow):
         self.btn_export.setEnabled(False)
         self.btn_export.clicked.connect(self._export_bottle_dialog)
         tools_layout.addWidget(self.btn_export)
+
+        self.btn_dll_overrides = QPushButton(" DLLs")
+        self.btn_dll_overrides.setEnabled(False)
+        self.btn_dll_overrides.clicked.connect(self._open_dll_overrides)
+        tools_layout.addWidget(self.btn_dll_overrides)
+
+        self.btn_winecfg = QPushButton(" winecfg")
+        self.btn_winecfg.setEnabled(False)
+        self.btn_winecfg.clicked.connect(self._launch_winecfg)
+        tools_layout.addWidget(self.btn_winecfg)
+
+        self.btn_regedit = QPushButton(" regedit")
+        self.btn_regedit.setEnabled(False)
+        self.btn_regedit.clicked.connect(self._launch_regedit)
+        tools_layout.addWidget(self.btn_regedit)
+
+        self.btn_terminal = QPushButton(" Terminal")
+        self.btn_terminal.setEnabled(False)
+        self.btn_terminal.clicked.connect(self._launch_terminal)
+        tools_layout.addWidget(self.btn_terminal)
 
         self.btn_clone = QPushButton(" Clone")
         self.btn_clone.setEnabled(False)
@@ -365,6 +394,10 @@ class MainWindow(QMainWindow):
         self.btn_logs.setEnabled(False)
         self.btn_snapshots.setEnabled(False)
         self.btn_export.setEnabled(False)
+        self.btn_dll_overrides.setEnabled(False)
+        self.btn_winecfg.setEnabled(False)
+        self.btn_regedit.setEnabled(False)
+        self.btn_terminal.setEnabled(False)
         self.btn_clone.setEnabled(False)
         self.btn_delete.setEnabled(False)
         self.btn_add_prog.setEnabled(False)
@@ -392,6 +425,10 @@ class MainWindow(QMainWindow):
         self.btn_logs.setEnabled(True)
         self.btn_snapshots.setEnabled(True)
         self.btn_export.setEnabled(True)
+        self.btn_dll_overrides.setEnabled(True)
+        self.btn_winecfg.setEnabled(True)
+        self.btn_regedit.setEnabled(True)
+        self.btn_terminal.setEnabled(True)
         self.btn_clone.setEnabled(True)
         self.btn_delete.setEnabled(True)
         self.btn_add_prog.setEnabled(True)
@@ -456,11 +493,21 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Invalid Executable", "Executable path cannot be empty.")
                 return
 
+            # Auto-extract Windows PE icon [FR-23]
+            icon_path = None
+            try:
+                extracted = IconExtractor.extract_icon(Path(data["exe_path"]))
+                if extracted:
+                    icon_path = str(extracted)
+            except Exception:
+                pass
+
             entry = ProgramEntry(
                 id=uuid.uuid4().hex[:8],
                 name=data["name"] or Path(data["exe_path"]).stem,
                 exe_path=data["exe_path"],
-                arguments=data["arguments"]
+                arguments=data["arguments"],
+                icon_path=icon_path
             )
             self.current_bottle.programs.append(entry)
             BottleManager.save_bottle_config(self.current_bottle)
@@ -717,3 +764,37 @@ class MainWindow(QMainWindow):
         if confirm == QMessageBox.Yes:
             BottleManager.delete_bottle(self.current_bottle.id)
             self._load_bottles()
+
+    def _open_dll_overrides(self):
+        if not self.current_bottle:
+            return
+        dialog = DllOverridesDialog(self.current_bottle, self)
+        dialog.exec()
+
+    def _open_diagnostics_dialog(self):
+        dialog = DiagnosticsDialog(self)
+        dialog.exec()
+
+    def _launch_winecfg(self):
+        if not self.current_bottle:
+            return
+        try:
+            WineToolsManager.launch_winecfg(self.current_bottle)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to launch winecfg: {e}")
+
+    def _launch_regedit(self):
+        if not self.current_bottle:
+            return
+        try:
+            WineToolsManager.launch_regedit(self.current_bottle)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to launch regedit: {e}")
+
+    def _launch_terminal(self):
+        if not self.current_bottle:
+            return
+        try:
+            WineToolsManager.launch_terminal_cmd(self.current_bottle)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to launch Wine Terminal: {e}")
