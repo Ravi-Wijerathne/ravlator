@@ -14,7 +14,10 @@ def get_icon(name: str, color: Optional[QColor] = None, size: QSize = QSize(20, 
     """
     Renders an SVG icon from assets/icons/lucide/, or draws a clean vector fallback.
     """
-    svg_path = Path("assets/icons/lucide") / f"{name}.svg"
+    project_root = Path(__file__).resolve().parents[3]
+    svg_path = project_root / "assets" / "icons" / "lucide" / f"{name}.svg"
+    if not svg_path.exists():
+        svg_path = Path("assets/icons/lucide") / f"{name}.svg"
     
     if svg_path.exists():
         renderer = QSvgRenderer(str(svg_path))
@@ -29,7 +32,7 @@ def get_icon(name: str, color: Optional[QColor] = None, size: QSize = QSize(20, 
             painter.end()
             return QIcon(pixmap)
 
-    # Fallback programmatic icon generator for standalone execution
+    # Fallback programmatic vector icon generator for standalone execution
     pixmap = QPixmap(size)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
@@ -56,6 +59,20 @@ def get_icon(name: str, color: Optional[QColor] = None, size: QSize = QSize(20, 
     elif name in ("stop", "square"):
         painter.setBrush(draw_color)
         painter.drawRect(5, 5, w - 10, h - 10)
+    elif name in ("folder", "dir"):
+        painter.drawRoundedRect(3, 6, w - 6, h - 9, 2, 2)
+        painter.drawLine(3, 6, 8, 6)
+        painter.drawLine(8, 6, 10, 3)
+        painter.drawLine(10, 3, 14, 3)
+    elif name in ("cpu", "process"):
+        painter.drawRoundedRect(5, 5, w - 10, h - 10, 2, 2)
+        painter.drawRect(8, 8, w - 16, h - 16)
+    elif name in ("terminal", "cmd"):
+        painter.drawLine(5, 6, 10, h // 2)
+        painter.drawLine(10, h // 2, 5, h - 6)
+        painter.drawLine(11, h - 6, w - 5, h - 6)
+    elif name in ("refresh", "reset"):
+        painter.drawArc(4, 4, w - 8, h - 8, 45 * 16, 270 * 16)
     else:
         painter.drawRoundedRect(3, 3, w - 6, h - 6, 3, 3)
 

@@ -74,6 +74,33 @@ class WineProcessManager:
         return args
 
     @classmethod
+    def build_launch_command(
+        cls,
+        runner_path: Path,
+        bottle: BottleConfig,
+        exe_path: str,
+        args: List[str]
+    ) -> List[str]:
+        """
+        [FR-16, FR-21, FR-27] Compiles the final Wine command list,
+        wrapping with virtual desktop if enabled, and applying Steam CEF flags.
+        """
+        wine_bin = cls.get_wine_bin(runner_path)
+        final_args = cls.inject_steam_cef_workaround(exe_path, args)
+
+        if bottle.virtual_desktop:
+            res = bottle.virtual_desktop_res or "1920x1080"
+            safe_title = bottle.name.replace(" ", "_")
+            return [
+                str(wine_bin),
+                "explorer.exe",
+                f"/desktop={safe_title},{res}",
+                exe_path
+            ] + final_args
+
+        return [str(wine_bin), exe_path] + final_args
+
+    @classmethod
     def get_wine_bin(cls, runner_path: Path) -> Path:
         """Locates the 64-bit Wine executable in the runner directory."""
         candidates = [

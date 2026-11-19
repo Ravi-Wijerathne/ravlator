@@ -205,3 +205,66 @@ class BottleManager:
         new_config.installed_dependencies = list(source.installed_dependencies)
         cls.save_bottle_config(new_config)
         return new_config
+
+    @classmethod
+    def reset_bottle(cls, bottle_id: str) -> BottleConfig:
+        """
+        [FR-05] Resets prefix state: restores registry hives to vanilla defaults,
+        clears temporary Wine caches and timestamp locks, while strictly preserving
+        installed applications and user save files in drive_c/users and drive_c/Program Files.
+        """
+        bottle = cls.get_bottle(bottle_id)
+        if not bottle:
+            raise ValueError(f"Bottle '{bottle_id}' does not exist.")
+
+        b_dir = cls.get_bottle_dir(bottle_id)
+        drive_c = b_dir / "drive_c"
+
+        # 1. Clean temporary Wine caches and locks
+        temp_dir = drive_c / "windows" / "temp"
+        if temp_dir.exists():
+            for item in temp_dir.iterdir():
+                try:
+                    if item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+                    else:
+                        item.unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+        timestamp_file = b_dir / ".update-timestamp"
+        if timestamp_file.exists():
+            timestamp_file.unlink(missing_ok=True)
+
+        # 2. Reset registry hives to default clean headers while archiving corrupt state
+        for reg_name in ["system.reg", "user.reg", "userdef.reg"]:
+            reg_path = b_dir / reg_name
+            if reg_path.exists():
+                bak_path = b_dir / f"{reg_name}.bak"
+                try:
+                    shutil.copy2(reg_path, bak_path)
+                except Exception:
+                    pass
+            header_key = "\\System" if "system" in reg_name else "\\User"
+            with open(reg_path, "w", encoding="utf-8") as f:
+                f.write(f"WINE REGISTRY Version 2\n;; All keys relative to {header_key}\n\n")
+
+        # 3. Ensure dosdevices symlinks (c: and z:) are healthy
+        dosdevices = b_dir / "dosdevices"
+        dosdevices.mkdir(parents=True, exist_ok=True)
+        c_link = dosdevices / "c:"
+        if not c_link.exists():
+            try:
+                c_link.symlink_to("../drive_c")
+            except Exception:
+                pass
+        z_link = dosdevices / "z:"
+        if not z_link.exists():
+            try:
+                z_link.symlink_to("/")
+            except Exception:
+                pass
+
+        # 4. Save and return updated bottle config
+        cls.save_bottle_config(bottle)
+        return bottle
