@@ -1,6 +1,7 @@
 """
 [FR-25] Ravlator Headless CLI Interface.
-Enables full prefix lifecycle, runner downloads, dependency installation, and Wine execution directly from the terminal.
+Enables full prefix lifecycle, runner downloads, dependency installation,
+store client deployment, process telemetry, and Wine execution directly from the terminal.
 """
 
 import argparse
@@ -10,9 +11,12 @@ from pathlib import Path
 from ravlator.core.bottle import BottleManager
 from ravlator.core.dependencies import DependencyManager
 from ravlator.core.downloader import DownloadProgress
+from ravlator.core.models import PresetType, WindowsVersion, ProgramEntry
 from ravlator.core.runner import RunnerManager
 from ravlator.core.process import WineEnvironmentBuilder, WineProcessManager
-from ravlator.core.models import PresetType, WindowsVersion
+from ravlator.core.shortcuts import ShortcutManager
+from ravlator.core.stores import StoreManager
+from ravlator.core.telemetry import ProcessTelemetry
 
 
 def print_progress(progress: DownloadProgress):
@@ -70,6 +74,27 @@ def main():
     inst_d_parser.add_argument("--bottle", required=True, type=str, help="Target bottle ID")
     inst_d_parser.add_argument("--dep", required=True, type=str, help="Dependency recipe ID (e.g. vcredist2022)")
 
+    # Command: install-store [FR-26, FR-27]
+    store_parser = subparsers.add_parser("install-store", help="Install a game store (steam, epic, gog)")
+    store_parser.add_argument("--bottle", required=True, type=str, help="Target bottle ID")
+    store_parser.add_argument("--store", required=True, choices=["steam", "epic", "gog"], help="Store to install")
+
+    # Command: create-shortcut [FR-24]
+    shortcut_parser = subparsers.add_parser("create-shortcut", help="Generate a standalone macOS .app bundle")
+    shortcut_parser.add_argument("--bottle", required=True, type=str, help="Target bottle ID")
+    shortcut_parser.add_argument("--exe", required=True, type=str, help="Path to Windows executable")
+    shortcut_parser.add_argument("--name", type=str, help="Custom application name")
+    shortcut_parser.add_argument("--out", type=str, help="Output directory (default: ~/Desktop)")
+
+    # Command: ps [FR-29]
+    ps_parser = subparsers.add_parser("ps", help="List active processes for a bottle")
+    ps_parser.add_argument("--bottle", required=True, type=str, help="Target bottle ID")
+
+    # Command: logs [FR-32]
+    logs_parser = subparsers.add_parser("logs", help="Display recent logs for a bottle")
+    logs_parser.add_argument("--bottle", required=True, type=str, help="Target bottle ID")
+    logs_parser.add_argument("--lines", type=int, default=50, help="Number of lines to tail")
+
     # Command: kill-bottle
     kill_parser = subparsers.add_parser("kill-bottle", help="Force terminate wineserver for a bottle")
     kill_parser.add_argument("name", type=str, help="ID of the bottle")
@@ -91,10 +116,10 @@ def main():
         if not bottles:
             print("No bottles found. Create one using: ravlator-cli create-bottle <name>")
             return
-        print(f"{'NAME':<20} {'ID':<25} {'PRESET':<15} {'RUNNER':<15} {'MSYNC'}")
-        print("-" * 80)
+        print(f"{'NAME':<20} {'ID':<25} {'PRESET':<15} {'RUNNER':<15} {'PROGRAMS'}")
+        print("-" * 85)
         for b in bottles:
-            print(f"{b.name:<20} {b.id:<25} {b.preset.value:<15} {b.runner_id:<15} {b.msync}")
+            print(f"{b.name:<20} {b.id:<25} {b.preset.value:<15} {b.runner_id:<15} {len(b.programs)}")
 
     elif args.command == "create-bottle":
         preset_enum = PresetType(args.preset)
@@ -141,6 +166,43 @@ def main():
             print(f"\n[+] Dependency '{args.dep}' installed successfully.")
         except Exception as e:
             print(f"\n[-] Installation error: {e}")
+
+    elif args.command == "install-store":
+        print(f"[*] Deploying {args.store.upper()} client into bottle '{args.bottle}'...")
+        try:
+            entry = StoreManager.install_store(args.bottle, args.store, progress_callback=print_progress)
+            print(f"\n[+] {entry.name} installed successfully as a bottle program entry.")
+        except Exception as e:
+            print(f"\n[-] Store deployment error: {e}")
+
+    elif args.command == "create-shortcut":
+        bottle = BottleManager.get_bottle(args.bottle)
+        if not bottle:
+            print(f"[-] Bottle '{args.bottle}' not found.")
+            sys.exit(1)
+
+        out_path = Path(args.out).resolve() if args.out else ShortcutManager.get_desktop_dir()
+        dummy_prog = ProgramEntry(
+            id="cli-shortcut",
+            name=args.name or Path(args.exe).stem,
+            exe_path=args.exe
+        )
+        bundle = ShortcutManager.create_macos_app(bottle, dummy_prog, output_dir=out_path)
+        print(f"[+] Standalone macOS .app generated at: {bundle}")
+
+    elif args.command == "ps":
+        procs = ProcessTelemetry.list_bottle_processes(args.bottle)
+        if not procs:
+            print(f"No active processes found for bottle '{args.bottle}'.")
+            return
+        print(f"{'PID':<8} {'NAME':<25} {'CPU %':<8} {'MEM %':<8} {'COMMAND'}")
+        print("-" * 75)
+        for p in procs:
+            print(f"{p.pid:<8} {p.name:<25} {p.cpu_percent:<8.1f} {p.mem_percent:<8.1f} {p.command[:35]}")
+
+    elif args.command == "logs":
+        log_content = ProcessTelemetry.read_recent_logs(args.bottle, max_lines=args.lines)
+        print(log_content)
 
     elif args.command == "kill-bottle":
         bottle = BottleManager.get_bottle(args.name)
