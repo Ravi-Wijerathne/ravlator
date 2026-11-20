@@ -1074,3 +1074,9 @@ class MainWindow(QMainWindow):
                 )
             except Exception as e:
                 QMessageBox.critical(self, "Reset Error", str(e))
+
+
+if __name__ == "__main__":
+    from ravlator.gui.app import main
+    main()
+
