@@ -19,6 +19,9 @@ from ravlator.core.shortcuts import ShortcutManager
 from ravlator.core.snapshots import SnapshotManager
 from ravlator.core.stores import StoreManager
 from ravlator.core.telemetry import ProcessTelemetry
+from ravlator.core.tools import WineToolsManager
+from ravlator.core.anticheat import AntiCheatDetector
+from ravlator.core.cloud_saves import CloudSaveManager
 
 
 def print_progress(progress: DownloadProgress):
@@ -123,9 +126,25 @@ def main():
     logs_parser.add_argument("--bottle", required=True, type=str, help="Target bottle ID")
     logs_parser.add_argument("--lines", type=int, default=50, help="Number of lines to tail")
 
-    # Command: kill-bottle
+    # Command: stop-bottle [FR-30]
+    stop_parser = subparsers.add_parser("stop-bottle", help="Gracefully stop all processes in a bottle (wineboot -s)")
+    stop_parser.add_argument("name", type=str, help="ID or name of the bottle")
+
+    # Command: kill-bottle [FR-31]
     kill_parser = subparsers.add_parser("kill-bottle", help="Force terminate wineserver for a bottle")
     kill_parser.add_argument("name", type=str, help="ID of the bottle")
+
+    # Command: winetricks [FR-20]
+    wt_parser = subparsers.add_parser("winetricks", help="Run winetricks verbs inside bottle environment")
+    wt_parser.add_argument("--bottle", required=True, type=str, help="Target bottle ID")
+    wt_parser.add_argument("verbs", nargs=argparse.REMAINDER, help="Winetricks verbs (e.g. vcrun2015)")
+
+    # Command: cloud-sync [Section 9 Phase 4]
+    cs_parser = subparsers.add_parser("cloud-sync", help="Manage cloud save symlinks (iCloud, Google Drive, etc.)")
+    cs_parser.add_argument("--bottle", required=True, type=str, help="Target bottle ID")
+    cs_parser.add_argument("--enable", action="store_true", help="Enable cloud save sync")
+    cs_parser.add_argument("--disable", action="store_true", help="Disable cloud save sync")
+    cs_parser.add_argument("--provider", type=str, default="iCloud Drive", help="Cloud provider name (default: 'iCloud Drive')")
 
     # Command: reset-bottle [FR-05]
     reset_parser = subparsers.add_parser("reset-bottle", help="Reset bottle registry and caches to vanilla state")
@@ -264,6 +283,15 @@ def main():
         log_content = ProcessTelemetry.read_recent_logs(args.bottle, max_lines=args.lines)
         print(log_content)
 
+    elif args.command == "stop-bottle":
+        bottle = BottleManager.get_bottle(args.name)
+        if not bottle:
+            print(f"[-] Bottle '{args.name}' not found.")
+            sys.exit(1)
+        runner_dir = RunnerManager.get_runner_dir(bottle.runner_id)
+        WineProcessManager.stop_bottle(bottle, runner_dir)
+        print(f"[+] Sent graceful shutdown signal (wineboot -s) to '{bottle.name}'")
+
     elif args.command == "kill-bottle":
         bottle = BottleManager.get_bottle(args.name)
         if not bottle:
@@ -272,6 +300,35 @@ def main():
         runner_dir = RunnerManager.get_runner_dir(bottle.runner_id)
         WineProcessManager.force_kill_bottle(bottle, runner_dir)
         print(f"[+] Wineserver terminated for bottle '{bottle.name}'")
+
+    elif args.command == "winetricks":
+        bottle = BottleManager.get_bottle(args.bottle)
+        if not bottle:
+            print(f"[-] Bottle '{args.bottle}' not found.")
+            sys.exit(1)
+        WineToolsManager.launch_winetricks_terminal(bottle, verbs=args.verbs or None)
+        print(f"[+] Launched Winetricks for '{bottle.name}'")
+
+    elif args.command == "cloud-sync":
+        bottle = BottleManager.get_bottle(args.bottle)
+        if not bottle:
+            print(f"[-] Bottle '{args.bottle}' not found.")
+            sys.exit(1)
+        if args.enable:
+            try:
+                dest = CloudSaveManager.enable_sync(bottle, args.provider)
+                print(f"[+] Cloud save synchronization enabled with {args.provider} at: {dest}")
+            except Exception as e:
+                print(f"[-] Failed to enable cloud sync: {e}")
+        elif args.disable:
+            CloudSaveManager.disable_sync(bottle)
+            print(f"[+] Cloud save synchronization disabled for '{bottle.name}'. Local folders restored.")
+        else:
+            is_synced = CloudSaveManager.is_sync_enabled(bottle)
+            status = "ACTIVE" if is_synced else "INACTIVE"
+            print(f"Cloud Save Sync for '{bottle.name}': {status}")
+            providers = CloudSaveManager.get_cloud_providers()
+            print(f"Available Cloud Providers: {', '.join(providers.keys()) if providers else 'None detected'}")
 
     elif args.command == "reset-bottle":
         print(f"[*] Resetting bottle '{args.bottle}'...")
@@ -286,7 +343,20 @@ def main():
         if not bottle:
             print(f"[-] Bottle '{args.bottle}' not found.")
             sys.exit(1)
-        
+
+        # [RSK-01] Kernel Anti-Cheat Scan
+        ac_match = AntiCheatDetector.scan_path(Path(args.exe))
+        if ac_match:
+            print("=" * 65)
+            print("[!] INCOMPATIBLE KERNEL ANTI-CHEAT DETECTED")
+            print(f"    Engine: {ac_match.name}")
+            print(f"    Trigger: {ac_match.trigger_file}")
+            print(f"    Notice: {ac_match.advisory}")
+            print("=" * 65)
+
+        # [RSK-05] Rolling automated registry hive backup
+        BottleManager.backup_registry(bottle.id)
+
         runner_dir = RunnerManager.get_runner_dir(bottle.runner_id)
         env = WineEnvironmentBuilder.build_env(bottle, runner_dir)
         full_command = WineProcessManager.build_launch_command(runner_dir, bottle, args.exe, args.args or [])

@@ -17,7 +17,8 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QListWidget, QListWidgetItem,
     QLabel, QPushButton, QFileDialog, QMessageBox, QFrame, QScrollArea,
     QCheckBox, QComboBox, QLineEdit, QDialog, QDialogButtonBox, QFormLayout,
-    QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget, QGridLayout, QGroupBox
+    QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget, QGridLayout, QGroupBox,
+    QInputDialog
 )
 
 from ravlator.core.bottle import BottleManager
@@ -32,6 +33,8 @@ from ravlator.core.portability import PortabilityManager
 from ravlator.core.icon_extractor import IconExtractor
 from ravlator.core.diagnostics import DiagnosticsManager
 from ravlator.core.tools import WineToolsManager
+from ravlator.core.anticheat import AntiCheatDetector
+from ravlator.core.cloud_saves import CloudSaveManager
 from ravlator.gui.utils.icons import get_icon
 from ravlator.gui.views.dependencies_dialog import DependenciesDialog
 from ravlator.gui.views.runners_dialog import RunnersDialog
@@ -422,6 +425,11 @@ class MainWindow(QMainWindow):
         self.btn_logs.clicked.connect(self._open_log_viewer)
         tools_grid.addWidget(self.btn_logs, 3, 1)
 
+        self.btn_winetricks = QPushButton("  Winetricks Package Runner")
+        self.btn_winetricks.setObjectName("utilityBtn")
+        self.btn_winetricks.clicked.connect(self._launch_winetricks)
+        tools_grid.addWidget(self.btn_winetricks, 4, 0)
+
         tab_tools_layout.addLayout(tools_grid)
         tab_tools_layout.addStretch()
 
@@ -463,10 +471,20 @@ class MainWindow(QMainWindow):
         self.btn_reset.clicked.connect(self._reset_bottle_dialog)
         maint_grid.addWidget(self.btn_reset, 1, 1)
 
+        self.btn_cloud_saves = QPushButton("  Cloud Saves Sync (iCloud / Drive)")
+        self.btn_cloud_saves.setObjectName("utilityBtn")
+        self.btn_cloud_saves.clicked.connect(self._toggle_cloud_saves_dialog)
+        maint_grid.addWidget(self.btn_cloud_saves, 2, 0)
+
         self.btn_delete = QPushButton("  Delete Bottle Permanently")
         self.btn_delete.setObjectName("dangerAction")
         self.btn_delete.clicked.connect(self._delete_bottle_dialog)
-        maint_grid.addWidget(self.btn_delete, 2, 0)
+        maint_grid.addWidget(self.btn_delete, 2, 1)
+
+        self.btn_force_kill = QPushButton("  Force Terminate (wineserver -k)")
+        self.btn_force_kill.setObjectName("dangerAction")
+        self.btn_force_kill.clicked.connect(self._force_kill_bottle_dialog)
+        maint_grid.addWidget(self.btn_force_kill, 3, 0)
 
         tab_maint_layout.addLayout(maint_grid)
         tab_maint_layout.addStretch()
@@ -656,6 +674,24 @@ class MainWindow(QMainWindow):
             )
             return
 
+        # [RSK-01] Pre-launch kernel anti-cheat detection & advisory
+        ac_match = AntiCheatDetector.scan_path(Path(program.exe_path))
+        if ac_match:
+            report = AntiCheatDetector.format_report(ac_match)
+            proceed = QMessageBox.warning(
+                self,
+                "Incompatible Kernel Anti-Cheat Detected",
+                f"Notice: Anti-cheat driver signatures were found for '{program.name}':\n\n{report}\n\n"
+                "Kernel anti-cheat drivers cannot execute under Wine/Darwin userspace and may fail to start or connect.\n"
+                "Do you still want to attempt running this program?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if proceed != QMessageBox.Yes:
+                return
+
+        # [RSK-05] Rolling automated registry hive backup
+        BottleManager.backup_registry(self.current_bottle.id)
+
         cmd_args = program.arguments.split() if program.arguments else []
         full_command = WineProcessManager.build_launch_command(
             runner_path=runner_dir,
@@ -766,11 +802,91 @@ class MainWindow(QMainWindow):
         self._launch_program(dummy_entry)
 
     def _stop_bottle(self):
+        """[FR-30] Sends graceful shutdown signal to bottle via wineboot -s."""
         if not self.current_bottle:
             return
         runner_dir = RunnerManager.get_runner_dir(self.current_bottle.runner_id)
-        WineProcessManager.force_kill_bottle(self.current_bottle, runner_dir)
-        QMessageBox.information(self, "Bottle Stopped", f"Processes terminated for '{self.current_bottle.name}'.")
+        WineProcessManager.stop_bottle(self.current_bottle, runner_dir)
+        QMessageBox.information(
+            self,
+            "Graceful Shutdown",
+            f"Shutdown signal (wineboot -s) sent to prefix '{self.current_bottle.name}'."
+        )
+
+    def _force_kill_bottle_dialog(self):
+        """[FR-31] Force-terminates wineserver and Wine subprocesses."""
+        if not self.current_bottle:
+            return
+        confirm = QMessageBox.question(
+            self,
+            "Force Terminate Wineserver",
+            f"Are you sure you want to force terminate all Wine processes for '{self.current_bottle.name}'?\n"
+            "This sends a SIGKILL/wineserver -k and may cause unsaved game data loss.",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if confirm == QMessageBox.Yes:
+            runner_dir = RunnerManager.get_runner_dir(self.current_bottle.runner_id)
+            WineProcessManager.force_kill_bottle(self.current_bottle, runner_dir)
+            QMessageBox.information(self, "Terminated", f"All Wine processes terminated for '{self.current_bottle.name}'.")
+
+    def _launch_winetricks(self):
+        """[FR-20] Launches Winetricks inside macOS Terminal configured with bottle environment."""
+        if not self.current_bottle:
+            return
+        try:
+            WineToolsManager.launch_winetricks_terminal(self.current_bottle)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to launch Winetricks: {e}")
+
+    def _toggle_cloud_saves_dialog(self):
+        """[SRS Section 9 Phase 4] Manages cloud save symlinks (iCloud Drive, Google Drive, etc.)."""
+        if not self.current_bottle:
+            return
+        is_synced = CloudSaveManager.is_sync_enabled(self.current_bottle)
+        providers = CloudSaveManager.get_cloud_providers()
+
+        if is_synced:
+            confirm = QMessageBox.question(
+                self,
+                "Cloud Save Sync Active",
+                f"Cloud save synchronization is currently ACTIVE for '{self.current_bottle.name}'.\n\n"
+                "Do you want to disable synchronization and restore local save folders to this prefix?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if confirm == QMessageBox.Yes:
+                try:
+                    CloudSaveManager.disable_sync(self.current_bottle)
+                    QMessageBox.information(self, "Sync Disabled", "Local save game directories have been restored.")
+                except Exception as e:
+                    QMessageBox.critical(self, "Error", f"Failed to revert cloud sync: {e}")
+        else:
+            if not providers:
+                QMessageBox.warning(
+                    self,
+                    "No Cloud Storage Detected",
+                    "No active iCloud Drive, Google Drive, OneDrive, or Dropbox folder was found on this Mac."
+                )
+                return
+
+            provider_names = list(providers.keys())
+            chosen, ok = QInputDialog.getItem(
+                self,
+                "Enable Cloud Saves Sync",
+                "Select cloud storage provider to synchronize game saves ('Saved Games', 'Documents/My Games'):",
+                provider_names,
+                0,
+                False
+            )
+            if ok and chosen:
+                try:
+                    cloud_path = CloudSaveManager.enable_sync(self.current_bottle, chosen)
+                    QMessageBox.information(
+                        self,
+                        "Cloud Sync Enabled",
+                        f"Game saves are now synchronized with {chosen} at:\n{cloud_path}"
+                    )
+                except Exception as e:
+                    QMessageBox.critical(self, "Cloud Sync Error", str(e))
 
     def _open_store_installer(self):
         if not self.current_bottle:
