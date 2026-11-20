@@ -130,7 +130,10 @@ class WineProcessManager:
         env = WineEnvironmentBuilder.build_env(bottle, runner_path)
         wineboot = wine_bin.parent / "wineboot"
         
-        cmd = [str(wineboot if wineboot.exists() else wine_bin), "wineboot", "-s"]
+        if wineboot.exists():
+            cmd = [str(wineboot), "-s"]
+        else:
+            cmd = [str(wine_bin), "wineboot", "-s"]
         try:
             res = subprocess.run(cmd, env=env, timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return res.returncode

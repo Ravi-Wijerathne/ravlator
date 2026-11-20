@@ -90,6 +90,21 @@ class DiagnosticsDialog(QDialog):
 
         layout.addWidget(rec_frame)
 
+        if not diag.has_rosetta2 and diag.is_apple_silicon:
+            btn_install_rosetta = QPushButton("Install Rosetta 2 (Apple Silicon)")
+            btn_install_rosetta.setObjectName("primaryAction")
+            btn_install_rosetta.clicked.connect(self._install_rosetta)
+            layout.addWidget(btn_install_rosetta)
+
         btn_close = QPushButton("Close")
         btn_close.clicked.connect(self.accept)
         layout.addWidget(btn_close)
+
+    def _install_rosetta(self):
+        from PySide6.QtWidgets import QMessageBox
+        success = DiagnosticsManager.install_rosetta()
+        if success:
+            QMessageBox.information(self, "Rosetta 2 Installed", "Rosetta 2 translation engine was installed successfully.")
+            self.accept()
+        else:
+            QMessageBox.warning(self, "Installation", "Please execute 'softwareupdate --install-rosetta' in Terminal to authorize.")

@@ -268,3 +268,25 @@ class BottleManager:
         # 4. Save and return updated bottle config
         cls.save_bottle_config(bottle)
         return bottle
+
+    @classmethod
+    def backup_registry(cls, bottle_id: str) -> bool:
+        """
+        [RSK-05, SRS Section 8.5] Creates rolling automated backups of registry hives
+        (system.reg.bak, user.reg.bak) before launching an application to prevent corruption.
+        """
+        b_dir = cls.get_bottle_dir(bottle_id)
+        if not b_dir.exists():
+            return False
+
+        backed_up = False
+        for reg_name in ["system.reg", "user.reg", "userdef.reg"]:
+            reg_path = b_dir / reg_name
+            if reg_path.exists():
+                bak_path = b_dir / f"{reg_name}.bak"
+                try:
+                    shutil.copy2(reg_path, bak_path)
+                    backed_up = True
+                except Exception:
+                    pass
+        return backed_up

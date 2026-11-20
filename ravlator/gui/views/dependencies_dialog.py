@@ -90,11 +90,31 @@ class DependenciesDialog(QDialog):
             status_text = "Installed" if is_installed else "Available"
             self.table.setItem(row, 2, QTableWidgetItem(status_text))
 
-            btn = QPushButton("Install")
-            btn.setEnabled(not is_installed)
-            if not is_installed:
+            if is_installed:
+                btn = QPushButton("Uninstall")
+                btn.setObjectName("dangerAction")
+                btn.clicked.connect(lambda _, rec=r: self._uninstall_dep(rec))
+            else:
+                btn = QPushButton("Install")
                 btn.clicked.connect(lambda _, rec=r: self._install_dep(rec))
             self.table.setCellWidget(row, 3, btn)
+
+    def _uninstall_dep(self, recipe: DependencyRecipe):
+        """[FR-19] Removes dependency and cleans up DLL overrides."""
+        confirm = QMessageBox.question(
+            self,
+            "Confirm Uninstallation",
+            f"Are you sure you want to remove '{recipe.name}' from this bottle?\n"
+            "This will revert associated DLL overrides.",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if confirm == QMessageBox.Yes:
+            try:
+                DependencyManager.uninstall_dependency(self.bottle.id, recipe.id)
+                QMessageBox.information(self, "Uninstalled", f"'{recipe.name}' was removed successfully.")
+                self._load_dependencies()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to uninstall dependency: {e}")
 
     def _install_dep(self, recipe: DependencyRecipe):
         self.progress_bar.setVisible(True)

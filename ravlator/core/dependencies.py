@@ -6,6 +6,7 @@ Decoupled from GUI frameworks.
 
 import json
 import subprocess
+import yaml
 from pathlib import Path
 from typing import Dict, List, Optional, Callable
 
@@ -17,7 +18,7 @@ from ravlator.core.process import WineEnvironmentBuilder, WineProcessManager
 from ravlator.core.runner import RunnerManager
 
 
-# Standard built-in recipes for essential gaming runtimes
+# Standard built-in recipes for essential gaming runtimes [FR-17]
 BUILTIN_RECIPES = [
     DependencyRecipe(
         id="vcredist2022",
@@ -42,6 +43,39 @@ BUILTIN_RECIPES = [
         dependencies=[]
     ),
     DependencyRecipe(
+        id="vcredist2013_x64",
+        name="Visual C++ 2013 Redistributable (x64)",
+        category="C/C++ Runtimes",
+        description="Microsoft Visual C++ 2013 64-bit runtime libraries (v120).",
+        download_url="https://download.microsoft.com/download/2/E/6/2E61CFA4-993B-4DD4-91DA-3737CD5CD6E3/vcredist_x64.exe",
+        sha256="",
+        installer_args=["/install", "/quiet", "/norestart"],
+        required_dll_overrides={},
+        dependencies=[]
+    ),
+    DependencyRecipe(
+        id="vcredist2013_x86",
+        name="Visual C++ 2013 Redistributable (x86)",
+        category="C/C++ Runtimes",
+        description="Microsoft Visual C++ 2013 32-bit runtime libraries (v120).",
+        download_url="https://download.microsoft.com/download/2/E/6/2E61CFA4-993B-4DD4-91DA-3737CD5CD6E3/vcredist_x86.exe",
+        sha256="",
+        installer_args=["/install", "/quiet", "/norestart"],
+        required_dll_overrides={},
+        dependencies=[]
+    ),
+    DependencyRecipe(
+        id="vcredist2010_x86",
+        name="Visual C++ 2010 Redistributable (x86)",
+        category="C/C++ Runtimes",
+        description="Legacy 32-bit Visual Studio 2010 runtime libraries (v100).",
+        download_url="https://download.microsoft.com/download/5/B/C/5BC5DBB3-652D-4DCE-B14A-475AB85EEF6E/vcredist_x86.exe",
+        sha256="",
+        installer_args=["/q", "/norestart"],
+        required_dll_overrides={},
+        dependencies=[]
+    ),
+    DependencyRecipe(
         id="directx9",
         name="DirectX End-User Runtimes (June 2010)",
         category="DirectX Components",
@@ -58,11 +92,69 @@ BUILTIN_RECIPES = [
         dependencies=[]
     ),
     DependencyRecipe(
+        id="directplay",
+        name="Microsoft DirectPlay (DirectX Legacy Networking)",
+        category="DirectX Components",
+        description="Legacy multiplayer networking protocol required by classic 2000s games.",
+        download_url="",
+        sha256="",
+        installer_args=[],
+        required_dll_overrides={
+            "dplayx": "native,builtin",
+            "dpnet": "native,builtin"
+        },
+        dependencies=[]
+    ),
+    DependencyRecipe(
+        id="wine_mono",
+        name="Wine Mono (.NET Replacement Runtime)",
+        category=".NET Frameworks",
+        description="Open-source .NET and Mono replacement runtime for Wine.",
+        download_url="https://dl.winehq.org/wine/wine-mono/9.1.0/wine-mono-9.1.0-x86.msi",
+        sha256="",
+        installer_args=["/quiet"],
+        required_dll_overrides={},
+        dependencies=[]
+    ),
+    DependencyRecipe(
+        id="dotnet48",
+        name="Microsoft .NET Framework 4.8",
+        category=".NET Frameworks",
+        description="Full offline installer for Microsoft .NET Framework 4.8.",
+        download_url="https://download.visualstudio.microsoft.com/download/pr/014120d7-d689-4305-befd-3cb711108212/0fd66638cde16859462a6243a4629a50/ndp48-x86-x64-allos-enu.exe",
+        sha256="",
+        installer_args=["/q", "/norestart"],
+        required_dll_overrides={"mscoree": "native"},
+        dependencies=[]
+    ),
+    DependencyRecipe(
+        id="openal",
+        name="OpenAL 3D Audio Runtime",
+        category="Media & Fonts",
+        description="Open Audio Library providing hardware-accelerated 3D positional audio.",
+        download_url="https://www.openal.org/downloads/oalinst.zip",
+        sha256="",
+        installer_args=["/s"],
+        required_dll_overrides={"openal32": "native,builtin"},
+        dependencies=[]
+    ),
+    DependencyRecipe(
+        id="physx",
+        name="NVIDIA PhysX System Software",
+        category="Media & Fonts",
+        description="Legacy hardware physics engine runtime required by Unreal Engine 3 games.",
+        download_url="https://us.download.nvidia.com/Windows/9.19.0218/PhysX-9.19.0218-SystemSoftware.exe",
+        sha256="",
+        installer_args=["/quiet"],
+        required_dll_overrides={},
+        dependencies=[]
+    ),
+    DependencyRecipe(
         id="corefonts",
         name="Microsoft TrueType Core Fonts",
         category="Media & Fonts",
         description="Arial, Times New Roman, Courier New, Verdana, and Tahoma fonts.",
-        download_url="",  # Handled via winetricks or system font linking
+        download_url="",
         sha256="",
         installer_args=[],
         required_dll_overrides={},
@@ -72,7 +164,7 @@ BUILTIN_RECIPES = [
 
 
 class DependencyManager:
-    """Manages parsing recipes and executing silent dependency installations."""
+    """Manages parsing declarative recipes and executing dependency installations [NFR-12]."""
 
     @classmethod
     def get_available_recipes(cls) -> List[DependencyRecipe]:
@@ -80,17 +172,27 @@ class DependencyManager:
         recipes = list(BUILTIN_RECIPES)
         recipes_dir = Config.get_recipes_dir()
         
-        # Load custom community recipes
+        # Load custom community declarative recipes (JSON and YAML) [NFR-12]
         if recipes_dir.exists():
-            for item in recipes_dir.glob("*.json"):
-                try:
-                    with open(item, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        recipe = DependencyRecipe(**data)
-                        if not any(r.id == recipe.id for r in recipes):
-                            recipes.append(recipe)
-                except Exception:
-                    continue
+            for item in recipes_dir.iterdir():
+                if item.suffix.lower() == ".json":
+                    try:
+                        with open(item, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                            recipe = DependencyRecipe(**data)
+                            if not any(r.id == recipe.id for r in recipes):
+                                recipes.append(recipe)
+                    except Exception:
+                        continue
+                elif item.suffix.lower() in (".yaml", ".yml"):
+                    try:
+                        with open(item, "r", encoding="utf-8") as f:
+                            data = yaml.safe_load(f)
+                            recipe = DependencyRecipe(**data)
+                            if not any(r.id == recipe.id for r in recipes):
+                                recipes.append(recipe)
+                    except Exception:
+                        continue
         return recipes
 
     @classmethod
@@ -157,4 +259,27 @@ class DependencyManager:
             bottle.installed_dependencies.append(recipe.id)
         BottleManager.save_bottle_config(bottle)
 
+        return True
+
+    @classmethod
+    def uninstall_dependency(cls, bottle_id: str, recipe_id: str) -> bool:
+        """
+        [FR-19] Removes a runtime package registration and cleans up its custom DLL overrides.
+        """
+        bottle = BottleManager.get_bottle(bottle_id)
+        if not bottle:
+            raise ValueError(f"Bottle '{bottle_id}' not found.")
+
+        recipe = cls.get_recipe(recipe_id)
+
+        # 1. Remove from installed dependencies list
+        if recipe_id in bottle.installed_dependencies:
+            bottle.installed_dependencies.remove(recipe_id)
+
+        # 2. Revert associated DLL overrides
+        if recipe and recipe.required_dll_overrides:
+            for dll in recipe.required_dll_overrides:
+                bottle.dll_overrides.pop(dll, None)
+
+        BottleManager.save_bottle_config(bottle)
         return True

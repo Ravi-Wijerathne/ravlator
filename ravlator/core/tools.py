@@ -81,3 +81,45 @@ echo "=== Ravlator: Wine Command Prompt ({bottle.name}) ==="
             return True
         except Exception:
             return False
+
+    @classmethod
+    def get_winetricks_path(cls, runner_path: Path) -> Optional[Path]:
+        """[FR-20] Locates winetricks script in runner or system paths."""
+        candidates = [
+            runner_path / "bin" / "winetricks",
+            Path("/opt/homebrew/bin/winetricks"),
+            Path("/usr/local/bin/winetricks")
+        ]
+        for c in candidates:
+            if c.exists():
+                return c
+        return None
+
+    @classmethod
+    def launch_winetricks_terminal(cls, bottle: BottleConfig, verbs: Optional[list] = None) -> None:
+        """
+        [FR-20] Spawns winetricks inside macOS Terminal configured with bottle environment.
+        """
+        runner_dir = RunnerManager.get_runner_dir(bottle.runner_id)
+        env = WineEnvironmentBuilder.build_env(bottle, runner_dir)
+        wine_bin = WineProcessManager.get_wine_bin(runner_dir)
+        b_dir = BottleManager.get_bottle_dir(bottle.id)
+
+        wt_bin = cls.get_winetricks_path(runner_dir)
+        if wt_bin:
+            cmd_str = f'"{wt_bin}" {" ".join(verbs)}' if verbs else f'"{wt_bin}"'
+        else:
+            cmd_str = 'echo "[-] winetricks was not found in runner or Homebrew.\nInstall it via: brew install winetricks"'
+
+        script_path = b_dir / "launch_winetricks.sh"
+        export_cmds = "\n".join(f'export {k}="{v}"' for k, v in env.items())
+        script_content = f"""#!/bin/sh
+{export_cmds}
+export WINE="{wine_bin}"
+cd "{b_dir}"
+echo "=== Ravlator: Winetricks ({bottle.name}) ==="
+{cmd_str}
+"""
+        script_path.write_text(script_content)
+        script_path.chmod(0o755)
+        subprocess.run(["open", "-a", "Terminal", str(script_path)])

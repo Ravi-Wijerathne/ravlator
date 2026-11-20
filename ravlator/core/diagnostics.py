@@ -102,6 +102,19 @@ class DiagnosticsManager:
         )
 
     @classmethod
+    def install_rosetta(cls) -> bool:
+        """[FR-11] Triggers Rosetta 2 installation via Apple softwareupdate."""
+        try:
+            res = subprocess.run(
+                ["/usr/sbin/softwareupdate", "--install-rosetta", "--agree-to-license"],
+                capture_output=True,
+                check=False
+            )
+            return res.returncode == 0
+        except Exception:
+            return False
+
+    @classmethod
     def get_diagnostic_summary(cls) -> str:
         d = cls.get_system_diagnostics()
         return (
