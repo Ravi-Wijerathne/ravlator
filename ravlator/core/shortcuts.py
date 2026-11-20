@@ -98,6 +98,11 @@ class ShortcutManager:
                 shutil.copyfile(src_icon, resources_dir / f"AppIcon{src_icon.suffix}")
                 icon_created = True
 
+        if not icon_created:
+            default_logo = Path(__file__).resolve().parents[2] / "assets" / "logo.png"
+            if default_logo.exists():
+                shutil.copyfile(default_logo, resources_dir / "AppIcon.png")
+
         # 3. Generate launcher execution script
         # Finds python virtual environment or system ravlator runner
         python_exec = Path(sys_python := os.environ.get("RAVLATOR_PYTHON_BIN", ""))

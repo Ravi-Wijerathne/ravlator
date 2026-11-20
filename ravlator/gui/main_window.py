@@ -12,7 +12,7 @@ from typing import Optional
 import uuid
 
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QAction, QColor, QFont, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QColor, QFont, QKeySequence, QShortcut, QIcon
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QListWidget, QListWidgetItem,
     QLabel, QPushButton, QFileDialog, QMessageBox, QFrame, QScrollArea,
@@ -148,6 +148,9 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Ravlator — Windows Gaming Manager")
+        logo_path = Path(__file__).resolve().parent.parent.parent / "assets" / "logo.png"
+        if logo_path.exists():
+            self.setWindowIcon(QIcon(str(logo_path)))
         self.resize(1060, 720)
         self.setMinimumSize(920, 620)
 
