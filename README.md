@@ -121,6 +121,10 @@ ravlator/
 
 4. **Launch the Graphical Application:**
    ```bash
+   python -m ravlator
+   # Or directly:
+   ravlator
+   # Or:
    python -m ravlator.gui.main_window
    ```
 

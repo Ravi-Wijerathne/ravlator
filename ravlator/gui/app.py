@@ -4,8 +4,9 @@ Initializes the Qt event loop, theme palette, and main window.
 """
 
 import sys
+from pathlib import Path
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import QApplication
 
 from ravlator.core.config import Config
@@ -20,6 +21,11 @@ def main():
     app.setOrganizationName("Ravlator")
     app.setApplicationDisplayName("Ravlator")
     app.setStyle("Fusion")
+
+    # Application Dock & Window Icon
+    logo_path = Path(__file__).resolve().parent.parent.parent / "assets" / "logo.png"
+    if logo_path.exists():
+        app.setWindowIcon(QIcon(str(logo_path)))
 
     # Set default native macOS font hierarchy
     font = QFont("-apple-system", 13)

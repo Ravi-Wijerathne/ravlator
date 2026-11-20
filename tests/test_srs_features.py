@@ -31,20 +31,15 @@ from ravlator.core.process import WineProcessManager
 class TestSRSFeatures(unittest.TestCase):
 
     def setUp(self):
-        self.test_dir = tempfile.mkdtemp()
-        self.original_bottles_dir = Config.get_bottles_dir()
-        self.original_recipes_dir = Config.get_recipes_dir()
-
-        # Point Config to temporary directory
-        Config.BOTTLES_DIR = Path(self.test_dir) / "bottles"
-        Config.RECIPES_DIR = Path(self.test_dir) / "recipes"
-        Config.BOTTLES_DIR.mkdir(parents=True, exist_ok=True)
-        Config.RECIPES_DIR.mkdir(parents=True, exist_ok=True)
+        self.test_dir = tempfile.mkdtemp(prefix="ravlator_srs_test_")
+        os.environ[Config.ENV_DATA_DIR] = self.test_dir
+        Config.get_bottles_dir().mkdir(parents=True, exist_ok=True)
+        Config.get_recipes_dir().mkdir(parents=True, exist_ok=True)
 
     def tearDown(self):
-        Config.BOTTLES_DIR = self.original_bottles_dir
-        Config.RECIPES_DIR = self.original_recipes_dir
         shutil.rmtree(self.test_dir, ignore_errors=True)
+        if Config.ENV_DATA_DIR in os.environ:
+            del os.environ[Config.ENV_DATA_DIR]
 
     def test_anticheat_detection(self):
         """[RSK-01] Verify detection of kernel anti-cheat engines."""
