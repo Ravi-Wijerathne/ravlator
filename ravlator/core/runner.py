@@ -17,27 +17,33 @@ from ravlator.core.downloader import FileDownloader, DownloadProgress
 from ravlator.core.models import RunnerInfo
 
 
-# Default official CDN catalog manifests
+# Default verified official & community CDN catalog manifests
 DEFAULT_RUNNERS = [
     RunnerInfo(
         id="gptk-2.0",
-        name="Apple Game Porting Toolkit 2.0 (Wine-CX)",
-        version="2.0.0",
+        name="Apple Game Porting Toolkit 2.1 (Wine-CX)",
+        version="2.1.0",
         path="",
         source_type="cdn",
         sha256="",  # Empty skips strict sha enforcement if dynamically updated
-        download_url="https://github.com/ravlator/runners/releases/download/v2.0.0/gptk-2.0.0-macos.tar.xz",
+        download_url="https://github.com/Gcenx/game-porting-toolkit/releases/download/Game-Porting-Toolkit-2.1/game-porting-toolkit-2.1.tar.xz",
+        fallback_urls=[
+            "https://github.com/Gcenx/game-porting-toolkit/releases/download/Game-Porting-Toolkit-3.0-3/game-porting-toolkit-3.0-3.tar.xz"
+        ],
         has_d3dmetal=True,
         is_installed=False
     ),
     RunnerInfo(
         id="wine-cx-24",
-        name="Wine-CX 24.0.0 (CrossOver Base)",
-        version="24.0.0",
+        name="Wine-CX 23.7.1 (Heroic / CrossOver)",
+        version="23.7.1",
         path="",
         source_type="cdn",
         sha256="",
-        download_url="https://github.com/ravlator/runners/releases/download/v24.0.0/wine-cx-24.0.0-macos.tar.xz",
+        download_url="https://github.com/Heroic-Games-Launcher/wine-crossover/releases/download/23.7.1-1/Wine-Crossover-23.7.1-1.tar.xz",
+        fallback_urls=[
+            "https://github.com/Gcenx/macOS_Wine_builds/releases/download/11.21/wine-staging-11.21-osx64.tar.xz"
+        ],
         has_d3dmetal=True,
         is_installed=False
     )
@@ -142,6 +148,34 @@ class RunnerManager:
                     item.chmod(item.stat().st_mode | 0o111)
 
     @classmethod
+    def normalize_runner_structure(cls, dest_dir: Path) -> None:
+        """
+        Normalizes unpacked runner directory so bin/wine64 and lib/ are directly
+        located under dest_dir, resolving nested .app bundles or top-level wrapper directories.
+        """
+        # If bin/wine64 or bin/wine already exists directly under dest_dir, we're good
+        if (dest_dir / "bin" / "wine64").exists() or (dest_dir / "bin" / "wine").exists():
+            return
+
+        # Look for nested wine directories (e.g. *.app/Contents/Resources/wine or nested-dir/bin/wine64)
+        found_bins = list(dest_dir.glob("**/bin/wine64")) or list(dest_dir.glob("**/bin/wine"))
+        if not found_bins:
+            return
+
+        # found_bins[0] is .../bin/wine64; its parent.parent is the root containing bin, lib, share
+        nested_wine_root = found_bins[0].parent.parent
+        if nested_wine_root == dest_dir:
+            return
+
+        temp_dir = dest_dir.parent / f"{dest_dir.name}_temp_norm"
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+        shutil.move(str(nested_wine_root), str(temp_dir))
+        shutil.rmtree(dest_dir, ignore_errors=True)
+        shutil.move(str(temp_dir), str(dest_dir))
+
+    @classmethod
     def download_and_extract_runner(
         cls,
         runner_id: str,
@@ -149,47 +183,84 @@ class RunnerManager:
         cancel_check: Optional[Callable[[], bool]] = None
     ) -> RunnerInfo:
         """
-        [FR-08] Streams runner from GitHub Release CDN, extracts, verifies,
-        and clears quarantine attributes.
+        [FR-08] Streams runner from verified CDN, extracts, normalizes directory structure,
+        and clears Apple Gatekeeper quarantine attributes.
         """
         runner = cls.get_runner(runner_id)
         if not runner:
             raise ValueError(f"Runner '{runner_id}' not found in catalog.")
 
-        if not runner.download_url:
-            raise ValueError(f"Runner '{runner_id}' has no download URL configured.")
+        urls_to_try = []
+        if runner.download_url:
+            urls_to_try.append(runner.download_url)
+        if hasattr(runner, "fallback_urls") and runner.fallback_urls:
+            urls_to_try.extend(runner.fallback_urls)
+
+        if not urls_to_try:
+            raise ValueError(f"Runner '{runner_id}' has no download URLs configured.")
 
         dest_dir = cls.get_runner_dir(runner_id)
-        archive_name = Path(runner.download_url).name
-        cache_archive = Config.get_cache_dir() / "runners" / archive_name
+        download_success = False
+        last_error = None
+        cache_archive = None
 
-        # 1. Download
-        FileDownloader.download_file(
-            url=runner.download_url,
-            dest_path=cache_archive,
-            expected_sha256=runner.sha256 if runner.sha256 else None,
-            progress_callback=progress_callback,
-            cancel_check=cancel_check
-        )
+        # 1. Download from primary or fallback CDN mirrors
+        for url in urls_to_try:
+            try:
+                archive_name = Path(url).name
+                cache_archive = Config.get_cache_dir() / "runners" / archive_name
+                FileDownloader.download_file(
+                    url=url,
+                    dest_path=cache_archive,
+                    expected_sha256=runner.sha256 if runner.sha256 else None,
+                    progress_callback=progress_callback,
+                    cancel_check=cancel_check
+                )
+                download_success = True
+                break
+            except Exception as e:
+                last_error = e
+                continue
+
+        if not download_success or not cache_archive or not cache_archive.exists():
+            raise RuntimeError(f"Failed to download runner '{runner_id}' from CDN: {last_error}")
 
         # 2. Extract into destination directory
         dest_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            shutil.unpack_archive(str(cache_archive), str(dest_dir))
-        except Exception:
-            # Fallback for tar.xz / tar.zst
-            try:
-                with tarfile.open(cache_archive) as tar:
-                    tar.extractall(dest_dir)
-            except Exception as e:
-                shutil.rmtree(dest_dir, ignore_errors=True)
-                raise RuntimeError(f"Failed to unpack runner archive: {e}") from e
+        extracted = False
 
-        # 3. Apply permissions and strip quarantine
+        # Attempt extraction via macOS native tar (fastest and preserves Darwin symlinks)
+        try:
+            res = subprocess.run(
+                ["tar", "-xf", str(cache_archive), "-C", str(dest_dir)],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            if res.returncode == 0:
+                extracted = True
+        except Exception:
+            pass
+
+        if not extracted:
+            try:
+                shutil.unpack_archive(str(cache_archive), str(dest_dir))
+            except Exception:
+                try:
+                    with tarfile.open(cache_archive) as tar:
+                        tar.extractall(dest_dir)
+                except Exception as e:
+                    shutil.rmtree(dest_dir, ignore_errors=True)
+                    raise RuntimeError(f"Failed to unpack runner archive: {e}") from e
+
+        # 3. Normalize directory structure (flatten nested .app or subfolders)
+        cls.normalize_runner_structure(dest_dir)
+
+        # 4. Apply permissions and strip quarantine
         cls.make_binaries_executable(dest_dir)
         cls.strip_quarantine(dest_dir)
 
-        # 4. Save metadata
+        # 5. Save metadata
         runner.path = str(dest_dir)
         runner.is_installed = True
         with open(dest_dir / "runner.json", "w", encoding="utf-8") as f:
