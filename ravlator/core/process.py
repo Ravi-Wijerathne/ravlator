@@ -47,9 +47,18 @@ class WineEnvironmentBuilder:
         lib_dirs = [
             str(runner_path / "lib"),
             str(runner_path / "lib64"),
+            str(runner_path / "Contents" / "Resources" / "wine" / "lib"),
+            str(runner_path / "Contents" / "Resources" / "wine" / "lib64"),
             "/usr/lib"
         ]
-        env["DYLD_FALLBACK_LIBRARY_PATH"] = ":".join(lib_dirs)
+        env["DYLD_FALLBACK_LIBRARY_PATH"] = ":".join(d for d in lib_dirs if Path(d).exists() or d == "/usr/lib")
+
+        # Ensure Wine runner's bin directory is at the front of PATH
+        bin_dir = runner_path / "bin"
+        if not bin_dir.exists():
+            bin_dir = runner_path / "Contents" / "Resources" / "wine" / "bin"
+        if bin_dir.exists():
+            env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
         
         return env
 
@@ -105,7 +114,9 @@ class WineProcessManager:
         """Locates the 64-bit Wine executable in the runner directory."""
         candidates = [
             runner_path / "bin" / "wine64",
-            runner_path / "bin" / "wine"
+            runner_path / "bin" / "wine",
+            runner_path / "Contents" / "Resources" / "wine" / "bin" / "wine64",
+            runner_path / "Contents" / "Resources" / "wine" / "bin" / "wine",
         ]
         for c in candidates:
             if c.exists():
@@ -116,7 +127,8 @@ class WineProcessManager:
     def get_wineserver_bin(cls, runner_path: Path) -> Path:
         """Locates the wineserver executable."""
         candidates = [
-            runner_path / "bin" / "wineserver"
+            runner_path / "bin" / "wineserver",
+            runner_path / "Contents" / "Resources" / "wine" / "bin" / "wineserver",
         ]
         for c in candidates:
             if c.exists():

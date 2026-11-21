@@ -91,6 +91,7 @@ class RunnerInfo(BaseModel):
     source_type: str = "cdn"  # 'cdn' or 'local'
     sha256: Optional[str] = None
     download_url: Optional[str] = None
+    fallback_urls: List[str] = Field(default_factory=list)
     has_d3dmetal: bool = True
     is_installed: bool = False
 

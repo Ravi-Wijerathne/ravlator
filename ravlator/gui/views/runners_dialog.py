@@ -74,6 +74,11 @@ class RunnersDialog(QDialog):
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         layout.addWidget(self.table)
 
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("color: #6E6E73; font-size: 12px;")
+        self.status_label.setVisible(False)
+        layout.addWidget(self.status_label)
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         layout.addWidget(self.progress_bar)
@@ -100,6 +105,8 @@ class RunnersDialog(QDialog):
     def _download_runner(self, runner_id: str):
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
+        self.status_label.setVisible(True)
+        self.status_label.setText(f"Connecting to CDN and initiating download for '{runner_id}'...")
         self.table.setEnabled(False)
 
         self.worker = RunnerDownloadWorker(runner_id)
@@ -109,10 +116,23 @@ class RunnersDialog(QDialog):
 
     def _on_progress(self, progress: DownloadProgress):
         self.progress_bar.setValue(int(progress.percentage))
+        mb_down = progress.downloaded_bytes / (1024 * 1024)
+        mb_total = progress.total_bytes / (1024 * 1024)
+        speed_mb = progress.speed_bps / (1024 * 1024)
+        if mb_total > 0:
+            if progress.percentage >= 99.9:
+                self.status_label.setText("Download complete! Unpacking and configuring runner binaries...")
+            else:
+                self.status_label.setText(
+                    f"Downloading: {mb_down:.1f} / {mb_total:.1f} MB ({progress.percentage:.1f}%) — {speed_mb:.2f} MB/s"
+                )
+        else:
+            self.status_label.setText(f"Downloading: {mb_down:.1f} MB — {speed_mb:.2f} MB/s")
 
     def _on_finished(self, success: bool, message: str):
         self.table.setEnabled(True)
         self.progress_bar.setVisible(False)
+        self.status_label.setVisible(False)
         if success:
             QMessageBox.information(self, "Success", "Runner unpacked and ready for gaming!")
             self._load_runners()

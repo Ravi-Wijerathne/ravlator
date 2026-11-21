@@ -98,6 +98,27 @@ class TestPhase2(unittest.TestCase):
         p_zero = DownloadProgress(downloaded_bytes=0, total_bytes=0, speed_bps=0)
         self.assertEqual(p_zero.percentage, 0.0)
 
+    def test_runner_structure_normalization(self):
+        """[FR-08] Test flattening of nested runner directories / .app bundles."""
+        mock_dest = Path(self.test_dir) / "nested_runner"
+        mock_dest.mkdir(parents=True, exist_ok=True)
+
+        nested_wine = mock_dest / "Game Porting Toolkit.app" / "Contents" / "Resources" / "wine"
+        (nested_wine / "bin").mkdir(parents=True, exist_ok=True)
+        (nested_wine / "lib").mkdir(parents=True, exist_ok=True)
+        (nested_wine / "bin" / "wine64").write_text("binary")
+
+        RunnerManager.normalize_runner_structure(mock_dest)
+        self.assertTrue((mock_dest / "bin" / "wine64").exists())
+        self.assertTrue((mock_dest / "lib").exists())
+
+    def test_cdn_runners_configured(self):
+        """[FR-07] Verify default CDN runners have valid URLs and fallbacks."""
+        from ravlator.core.runner import DEFAULT_RUNNERS
+        for r in DEFAULT_RUNNERS:
+            self.assertTrue(r.download_url.startswith("https://"))
+            self.assertGreater(len(r.fallback_urls), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
