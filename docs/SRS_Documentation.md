@@ -644,6 +644,10 @@ sequenceDiagram
 - **NFR-06 (Privilege Containment):** Ravlator shall never execute under elevated privileges (`root` / `sudo`).
 - **NFR-07 (Code Signing & Notarization):** The distributed `.dmg` package shall be signed with a valid Apple Developer ID Certificate and notarized via Apple's Notary Service (`notarytool`), preventing Gatekeeper blocks.
 - **NFR-08 (Telemetry & Privacy):** No user personal data, game titles, or filenames shall be transmitted to external servers. Only optional anonymous crash telemetry may be reported if explicitly enabled by the user.
+- **NFR-13 (Drive Z: Filesystem Sandbox Isolation):** By default, the prefix's `dosdevices/z:` link shall point to `../drive_c` rather than the host root filesystem `/`, preventing guest Windows applications, ransomware, or installers from accessing host macOS files outside the bottle.
+- **NFR-14 (Archive Extraction Path Traversal Prevention):** All tar/zip extraction routines during runner installation, bottle imports, and dependency handling must validate target paths against the destination root to prevent Zip Slip and Tar Slip vulnerabilities.
+- **NFR-15 (POSIX Shell Injection Protection):** All dynamically generated launch scripts (standalone macOS `.app` launchers, Terminal scripts) and subprocess invocations must strictly tokenize and escape arguments using `shlex.quote` to eliminate command injection vectors.
+- **NFR-16 (Secure Transport Enforcement):** All asset, runner, and manifest downloads must enforce TLS-encrypted HTTPS transport and strictly reject plain HTTP endpoints.
 
 ### 6.4 Usability & Human Factors
 - **NFR-09 (Zero-Configuration Onboarding):** A first-time user shall be able to download Ravlator, click "Create Bottle", install Steam, and start a game in under 5 clicks.
@@ -818,7 +822,7 @@ wine64 "C:\Program Files (x86)\Steam\Steam.exe" \
 ├── bottle.json               # Ravlator metadata & configuration
 ├── dosdevices/               # Drive letter symbolic links
 │   ├── c: -> ../drive_c
-│   └── z: -> / (Root macOS filesystem)
+│   └── z: -> ../drive_c      # Sandbox Mode (default) or / (Full Access Mode)
 ├── drive_c/                  # Emulated Windows C: drive
 │   ├── Program Files/
 │   ├── Program Files (x86)/

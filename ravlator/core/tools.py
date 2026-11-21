@@ -4,6 +4,7 @@ Enables launching winecfg, regedit, wine cmd, and dynamic Windows version toggle
 Decoupled from GUI frameworks.
 """
 
+import shlex
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -53,14 +54,18 @@ class WineToolsManager:
         wine_bin = WineProcessManager.get_wine_bin(runner_dir)
         b_dir = BottleManager.get_bottle_dir(bottle.id)
 
-        # Create temporary script for Terminal to run
+        # Create temporary script for Terminal to run with secure shell quoting [VULN-03]
         script_path = b_dir / "launch_terminal.sh"
-        export_cmds = "\n".join(f'export {k}="{v}"' for k, v in env.items())
+        export_cmds = "\n".join(f"export {k}={shlex.quote(str(v))}" for k, v in env.items())
+        q_drive_c = shlex.quote(str(b_dir / "drive_c"))
+        q_wine_bin = shlex.quote(str(wine_bin))
+        safe_name = bottle.name.replace("\n", " ").replace("\r", " ")
+
         script_content = f"""#!/bin/sh
 {export_cmds}
-cd "{b_dir}/drive_c"
-echo "=== Ravlator: Wine Command Prompt ({bottle.name}) ==="
-"{wine_bin}" cmd
+cd {q_drive_c}
+echo "=== Ravlator: Wine Command Prompt ({safe_name}) ==="
+exec {q_wine_bin} cmd
 """
         script_path.write_text(script_content)
         script_path.chmod(0o755)
@@ -107,17 +112,22 @@ echo "=== Ravlator: Wine Command Prompt ({bottle.name}) ==="
 
         wt_bin = cls.get_winetricks_path(runner_dir)
         if wt_bin:
-            cmd_str = f'"{wt_bin}" {" ".join(verbs)}' if verbs else f'"{wt_bin}"'
+            escaped_verbs = " ".join(shlex.quote(str(v)) for v in verbs) if verbs else ""
+            cmd_str = f"{shlex.quote(str(wt_bin))} {escaped_verbs}".strip()
         else:
             cmd_str = 'echo "[-] winetricks was not found in runner or Homebrew.\nInstall it via: brew install winetricks"'
 
         script_path = b_dir / "launch_winetricks.sh"
-        export_cmds = "\n".join(f'export {k}="{v}"' for k, v in env.items())
+        export_cmds = "\n".join(f"export {k}={shlex.quote(str(v))}" for k, v in env.items())
+        q_b_dir = shlex.quote(str(b_dir))
+        q_wine_bin = shlex.quote(str(wine_bin))
+        safe_name = bottle.name.replace("\n", " ").replace("\r", " ")
+
         script_content = f"""#!/bin/sh
 {export_cmds}
-export WINE="{wine_bin}"
-cd "{b_dir}"
-echo "=== Ravlator: Winetricks ({bottle.name}) ==="
+export WINE={q_wine_bin}
+cd {q_b_dir}
+echo "=== Ravlator: Winetricks ({safe_name}) ==="
 {cmd_str}
 """
         script_path.write_text(script_content)

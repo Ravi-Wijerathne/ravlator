@@ -6,6 +6,7 @@ macOS .app generator, task manager, and store installer.
 """
 
 import sys
+import shlex
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -340,6 +341,10 @@ class MainWindow(QMainWindow):
         self.chk_retina.stateChanged.connect(self._update_settings)
         grp_graphics_layout.addWidget(self.chk_retina)
 
+        self.chk_sandbox = QCheckBox("Filesystem Sandbox Isolation (Restricts drive Z: from accessing host Mac root '/')")
+        self.chk_sandbox.stateChanged.connect(self._update_settings)
+        grp_graphics_layout.addWidget(self.chk_sandbox)
+
         # Virtual Desktop row
         vd_row = QHBoxLayout()
         self.chk_virtual_desktop = QCheckBox("Emulate Virtual Desktop Container:")
@@ -572,6 +577,10 @@ class MainWindow(QMainWindow):
         self.chk_retina.setChecked(bottle.retina)
         self.chk_retina.blockSignals(False)
 
+        self.chk_sandbox.blockSignals(True)
+        self.chk_sandbox.setChecked(getattr(bottle, "sandbox_drive_z", True))
+        self.chk_sandbox.blockSignals(False)
+
         self.chk_virtual_desktop.blockSignals(True)
         self.chk_virtual_desktop.setChecked(bottle.virtual_desktop)
         self.chk_virtual_desktop.blockSignals(False)
@@ -695,7 +704,12 @@ class MainWindow(QMainWindow):
         # [RSK-05] Rolling automated registry hive backup
         BottleManager.backup_registry(self.current_bottle.id)
 
-        cmd_args = program.arguments.split() if program.arguments else []
+        # Parse command line arguments safely with shlex [GAP-03]
+        try:
+            cmd_args = shlex.split(program.arguments) if program.arguments else []
+        except Exception:
+            cmd_args = program.arguments.split() if program.arguments else []
+
         full_command = WineProcessManager.build_launch_command(
             runner_path=runner_dir,
             bottle=self.current_bottle,
@@ -764,6 +778,13 @@ class MainWindow(QMainWindow):
         self.current_bottle.msync = self.chk_msync.isChecked()
         self.current_bottle.metal_hud = self.chk_metal_hud.isChecked()
         self.current_bottle.retina = self.chk_retina.isChecked()
+
+        prev_sandbox = getattr(self.current_bottle, "sandbox_drive_z", True)
+        new_sandbox = self.chk_sandbox.isChecked()
+        self.current_bottle.sandbox_drive_z = new_sandbox
+        if prev_sandbox != new_sandbox:
+            BottleManager.apply_sandbox_policy(self.current_bottle)
+
         self.current_bottle.virtual_desktop = self.chk_virtual_desktop.isChecked()
         self.current_bottle.virtual_desktop_res = self.res_combo.currentText()
         self.current_bottle.dxvk_hud = self.dxvk_hud_combo.currentData() or ""
