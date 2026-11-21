@@ -146,15 +146,15 @@ class BottleManager:
             (drive_c / "users" / "crossover").mkdir(parents=True, exist_ok=True)
             (drive_c / "windows" / "system32").mkdir(parents=True, exist_ok=True)
 
-            # dosdevices directory
+            # dosdevices directory [Appendix C, GAP-01 Host Isolation]
             dosdevices = b_dir / "dosdevices"
             dosdevices.mkdir(parents=True, exist_ok=True)
             c_link = dosdevices / "c:"
             if not c_link.exists():
                 c_link.symlink_to("../drive_c")
-            z_link = dosdevices / "z:"
-            if not z_link.exists():
-                z_link.symlink_to("/")
+
+            # Apply security sandbox policy for drive Z:
+            cls.apply_sandbox_policy(config)
 
             cls.save_bottle_config(config)
             return config
@@ -290,3 +290,31 @@ class BottleManager:
                 except Exception:
                     pass
         return backed_up
+
+    @classmethod
+    def apply_sandbox_policy(cls, bottle: BottleConfig) -> None:
+        """
+        [GAP-01] Configures drive Z: in dosdevices to enforce filesystem isolation.
+        When sandbox_drive_z is True, drive Z: is mapped to drive_c, preventing
+        Windows executables from accessing the macOS host root filesystem (/).
+        """
+        b_dir = cls.get_bottle_dir(bottle.id)
+        if not b_dir.exists():
+            return
+
+        dosdevices = b_dir / "dosdevices"
+        dosdevices.mkdir(parents=True, exist_ok=True)
+        z_link = dosdevices / "z:"
+
+        if z_link.is_symlink() or z_link.exists():
+            try:
+                z_link.unlink()
+            except Exception:
+                pass
+
+        if bottle.sandbox_drive_z:
+            # Map Z: safely to drive_c so Windows apps cannot reach /Users, /Applications, or /
+            z_link.symlink_to("../drive_c")
+        else:
+            # Legacy unconfined mode
+            z_link.symlink_to("/")

@@ -65,6 +65,9 @@ class BottleConfig(BaseModel):
     virtual_desktop: bool = False
     virtual_desktop_res: str = "1920x1080"
     
+    # Host Isolation & Security
+    sandbox_drive_z: bool = True  # Restricts Wine drive Z: from accessing macOS host root directory
+    
     # DLL Overrides [FR-09]
     dll_overrides: Dict[str, str] = Field(default_factory=lambda: {
         "d3d11": "native,builtin",

@@ -42,6 +42,9 @@ class FileDownloader:
         Downloads a remote file synchronously to a temporary file, verifying SHA-256 before moving.
         Designed to be called inside worker threads (QThread / ThreadPool).
         """
+        if not url.lower().startswith("https://"):
+            raise ValueError(f"Insecure transport protocol rejected: '{url}'. Ravlator requires TLS/HTTPS.")
+
         dest_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = dest_path.with_suffix(f"{dest_path.suffix}.tmp")
 

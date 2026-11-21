@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/Python-3.12%2B-blue?logo=python" alt="Python 3.12+" />
   <img src="https://img.shields.io/badge/GUI-PySide6%20(Qt%206)-green?logo=qt" alt="PySide6" />
   <img src="https://img.shields.io/badge/Specification-ISO%2FIEC%2FIEEE%2029148-orange" alt="SRS Specification" />
-  <img src="https://img.shields.io/badge/Tests-38%20Passed-brightgreen" alt="Tests" />
+  <img src="https://img.shields.io/badge/Tests-46%20Passed-brightgreen" alt="Tests" />
 </p>
 
 ---
@@ -55,6 +55,10 @@ Ravlator bridges the gap between raw Wine/GPTK translation layers and modern mac
 - **Winetricks Terminal Integration:** Built-in runner and Homebrew winetricks discovery with isolated execution in macOS `Terminal.app`.
 
 ### 🛡️ Safety, Portability & Cloud Sync
+- **Host Filesystem Sandbox Isolation:** Protects the macOS host by sandboxing Wine drive `Z:` to `drive_c`, preventing Windows executables, malware, or ransomware from traversing and modifying macOS host files (`/`, `/Users`, `/Library`).
+- **Zip Slip & Tar Slip Hardening:** Path traversal validation on all imported `.zip` and `.tar.gz` bottle archives, blocking malicious relative escapes (`../`).
+- **Shell Injection Immunity:** Strict `shlex.quote` tokenization across `.app` desktop bundle launchers and Terminal winetricks scripts.
+- **Enforced TLS/HTTPS Transport:** Mandates encrypted HTTPS connections for all CDN runner downloads and dependency recipes.
 - **Kernel Anti-Cheat Detection:** Pre-launch heuristic scan warning users of incompatible Windows kernel drivers (EasyAntiCheat, BattlEye, Riot Vanguard, Ricochet, GameGuard, Xigncode3).
 - **Rolling Registry Backups:** Automatic pre-launch backups (`system.reg.bak`, `user.reg.bak`) preventing registry corruption.
 - **Point-in-Time Snapshots:** Instant snapshots and state rollback before modifying configurations or installing untested mods.

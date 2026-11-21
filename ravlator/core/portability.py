@@ -90,28 +90,23 @@ class PortabilityManager:
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            # Extract archive
+            # Extract archive with Zip Slip / Tar Slip path traversal guards [VULN-01]
             if zipfile.is_zipfile(archive_path):
                 with zipfile.ZipFile(archive_path, "r") as zipf:
-                    zipf.extractall(dest_dir)
+                    cls._safe_extract_zip(zipf, dest_dir)
             elif tarfile.is_tarfile(archive_path):
                 with tarfile.open(archive_path, "r:*") as tar:
-                    tar.extractall(dest_dir)
+                    cls._safe_extract_tar(tar, dest_dir)
             else:
                 raise ValueError("Unsupported archive format. Expected .tar.gz, .tar.xz, or .zip.")
 
-            # Fix or recreate dosdevices symlinks [Appendix C]
+            # Fix or recreate dosdevices symlinks [Appendix C, GAP-01]
             dosdevices = dest_dir / "dosdevices"
             dosdevices.mkdir(parents=True, exist_ok=True)
             c_link = dosdevices / "c:"
             if c_link.is_symlink() or c_link.exists():
                 c_link.unlink()
             c_link.symlink_to("../drive_c")
-
-            z_link = dosdevices / "z:"
-            if z_link.is_symlink() or z_link.exists():
-                z_link.unlink()
-            z_link.symlink_to("/")
 
             # Update bottle.json with new target ID and name
             cfg_file = dest_dir / "bottle.json"
@@ -129,6 +124,9 @@ class PortabilityManager:
                     name=base_name
                 )
 
+            # Apply security sandbox policy for drive Z:
+            BottleManager.apply_sandbox_policy(config)
+
             BottleManager.save_bottle_config(config)
             return config
 
@@ -137,3 +135,36 @@ class PortabilityManager:
             if dest_dir.exists():
                 shutil.rmtree(dest_dir, ignore_errors=True)
             raise RuntimeError(f"Failed to import bottle archive: {e}") from e
+
+    @classmethod
+    def _safe_extract_zip(cls, zipf: zipfile.ZipFile, dest_dir: Path) -> None:
+        """[VULN-01] Safely extracts zip archives preventing Zip Slip directory traversal."""
+        resolved_dest = dest_dir.resolve()
+        for member in zipf.infolist():
+            target_path = (resolved_dest / member.filename).resolve()
+            if not target_path.is_relative_to(resolved_dest):
+                raise PermissionError(
+                    f"Security Alert: Directory traversal detected in zip archive: '{member.filename}'"
+                )
+            zipf.extract(member, resolved_dest)
+
+    @classmethod
+    def _safe_extract_tar(cls, tar: tarfile.TarFile, dest_dir: Path) -> None:
+        """[VULN-01] Safely extracts tar archives preventing Tar Slip directory traversal and link escapes."""
+        resolved_dest = dest_dir.resolve()
+        for member in tar.getmembers():
+            target_path = (resolved_dest / member.name).resolve()
+            if not target_path.is_relative_to(resolved_dest):
+                raise PermissionError(
+                    f"Security Alert: Directory traversal detected in tar archive: '{member.name}'"
+                )
+            if member.issym() or member.islnk():
+                link_target = (target_path.parent / member.linkname).resolve()
+                if not link_target.is_relative_to(resolved_dest):
+                    # Skip symlinks pointing outside prefix destination
+                    continue
+
+            if hasattr(tarfile, "data_filter"):
+                tar.extract(member, resolved_dest, filter="data")
+            else:
+                tar.extract(member, resolved_dest)
