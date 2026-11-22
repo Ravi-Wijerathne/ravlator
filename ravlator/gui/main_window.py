@@ -316,6 +316,11 @@ class MainWindow(QMainWindow):
         runner_pick_row.addStretch()
         grp_runner_layout.addRow("Assigned Wine/GPTK Runner:", runner_pick_row)
 
+        self.runner_tip_label = QLabel()
+        self.runner_tip_label.setStyleSheet("color: #6E6E73; font-size: 11px; padding: 2px 0;")
+        self.runner_tip_label.setWordWrap(True)
+        grp_runner_layout.addRow("", self.runner_tip_label)
+
         self.win_ver_combo = QComboBox()
         self.win_ver_combo.setMinimumWidth(280)
         self.win_ver_combo.addItem("Windows 10 (Standard 64-bit)", WindowsVersion.WIN10)
@@ -532,6 +537,7 @@ class MainWindow(QMainWindow):
         self.btn_stop.setEnabled(False)
         self.tab_widget.setEnabled(False)
         self.programs_table.setRowCount(0)
+        self.runner_tip_label.setText("")
 
     def _on_bottle_selected(self, current: Optional[QListWidgetItem]):
         if not current:
@@ -560,6 +566,7 @@ class MainWindow(QMainWindow):
             if r.id == bottle.runner_id:
                 self.runner_combo.setCurrentIndex(self.runner_combo.count() - 1)
         self.runner_combo.blockSignals(False)
+        self._update_runner_tip()
 
         # Reported Windows Version [FR-06]
         self.win_ver_combo.blockSignals(True)
@@ -801,6 +808,19 @@ class MainWindow(QMainWindow):
         if selected_runner_id and selected_runner_id != self.current_bottle.runner_id:
             self.current_bottle.runner_id = selected_runner_id
             BottleManager.save_bottle_config(self.current_bottle)
+        self._update_runner_tip()
+
+    def _update_runner_tip(self):
+        selected_id = self.runner_combo.currentData() or ""
+        if "gptk" in selected_id.lower():
+            self.runner_tip_label.setText(
+                "💡 <b>Apple GPTK (D3DMetal):</b> Translates modern 64-bit DirectX 11 & 12 to Metal 3. "
+                "<i>Note: D3DMetal does not translate DirectX 9 or 32-bit legacy titles (e.g. AC Brotherhood). Use Wine-CX for DX9.</i>"
+            )
+        else:
+            self.runner_tip_label.setText(
+                "💡 <b>Wine-CX (CrossOver):</b> Comprehensive DirectX 9, 10, 11, and 32-bit legacy compatibility via WineD3D."
+            )
 
     def _open_drive_c(self):
         if not self.current_bottle:

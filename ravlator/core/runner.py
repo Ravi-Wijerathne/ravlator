@@ -21,7 +21,7 @@ from ravlator.core.models import RunnerInfo
 DEFAULT_RUNNERS = [
     RunnerInfo(
         id="gptk-2.0",
-        name="Apple Game Porting Toolkit 2.1 (Wine-CX)",
+        name="Apple Game Porting Toolkit 2.1 (DX11 / DX12 • Metal 3)",
         version="2.1.0",
         path="",
         source_type="cdn",
@@ -35,7 +35,7 @@ DEFAULT_RUNNERS = [
     ),
     RunnerInfo(
         id="wine-cx-24",
-        name="Wine-CX 23.7.1 (Heroic / CrossOver)",
+        name="Wine-CX 23.7.1 (DX9 / DX10 / DX11 & 32-bit Legacy)",
         version="23.7.1",
         path="",
         source_type="cdn",
