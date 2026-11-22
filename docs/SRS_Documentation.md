@@ -509,20 +509,20 @@ graph TD
 
 ### 4.6 Game Store Integration & CEF Workarounds
 
-#### FR-26: Steam One-Click Deployment
-- **Description:** The system shall offer a 1-click installation action for the Windows version of Steam.
+#### FR-26: Official Game Store Integration & Setup Guide
+- **Description:** The system shall provide a dedicated setup guide for official Windows game store clients (Steam, Epic Games Launcher, GOG Galaxy, EA App, Battle.net), guiding the user to the official download pages, allowing direct execution of official installer binaries (`.exe` / `.msi`) within Wine, and offering automatic scanning and registration of installed stores.
 - **Processing:**
-  1. Download official `SteamSetup.exe`.
-  2. Execute installation inside the bottle.
-  3. Create an optimized Steam shortcut profile automatically.
+  1. Provide 1-click links to official vendor download portals.
+  2. Launch official installers interactively within the active bottle with Wine GUI feedback.
+  3. Automatically scan `drive_c` and register detected store executables into the bottle's program list.
 
-#### FR-27: Steam Chromium Embedded Framework (CEF) Crash Mitigation
-- **Description:** The system shall automatically inject specialized command-line parameters to prevent `steamwebhelper.exe` black-screen and crash errors under Wine/Metal translation.
+#### FR-27: Steam Chromium Embedded Framework (CEF) Crash Mitigation & Login Sync
+- **Description:** The system shall automatically inject specialized command-line parameters to prevent `steamwebhelper.exe` black-screen and crash errors under Wine/Metal translation, and provide 1-click synchronization of native macOS Steam login credentials (`config.vdf`, `loginusers.vdf`, `registry.vdf`, and `userdata/`).
 - **Mandatory Flags Injected:**
   `-no-cef-sandbox -cef-disable-gpu -noverifyfiles -allossearch`
 
-#### FR-28: Epic Games & GOG Galaxy Recipes
-- **Description:** The system shall provide dedicated installation recipes and required font/runtime dependencies for Epic Games Launcher and GOG Galaxy.
+#### FR-28: Epic Games, GOG Galaxy & EA App Compatibility
+- **Description:** The system shall maintain dedicated compatibility definitions, default installation paths, and recommended launch arguments for Epic Games Launcher (`-SkipBuildPatchPrereq`), GOG Galaxy, EA App, and Battle.net.
 
 ---
 

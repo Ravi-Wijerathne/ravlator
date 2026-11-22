@@ -134,6 +134,9 @@ class AddProgramDialog(QDialog):
             self.path_input.setText(file_path)
             if not self.name_input.text():
                 self.name_input.setText(Path(file_path).stem.replace("_", " ").title())
+            # Auto-inject Steam CEF stability flags if adding steam.exe [FR-27]
+            if Path(file_path).name.lower() == "steam.exe" and not self.args_input.text():
+                self.args_input.setText("-no-cef-sandbox -cef-disable-gpu -noverifyfiles -allossearch")
 
     def get_data(self):
         return {
@@ -393,8 +396,9 @@ class MainWindow(QMainWindow):
         tools_grid = QGridLayout()
         tools_grid.setSpacing(12)
 
-        self.btn_install_store = QPushButton("  Install Game Store (Steam, Epic, GOG)")
+        self.btn_install_store = QPushButton("  Game Stores & Launchers (Steam, Epic, GOG)")
         self.btn_install_store.setObjectName("utilityBtn")
+        self.btn_install_store.setToolTip("Setup official game stores, run installers, and sync Steam login cache")
         self.btn_install_store.clicked.connect(self._open_store_installer)
         tools_grid.addWidget(self.btn_install_store, 0, 0)
 

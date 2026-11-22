@@ -179,6 +179,48 @@ class TestNewFeatures(unittest.TestCase):
         finally:
             Path.home = real_home
 
+    def test_sync_native_steam_login_includes_registry_vdf(self):
+        """[FR-27] Verify copying of registry.vdf containing AutoLoginUser credentials."""
+        bottle = BottleManager.create_bottle("SteamSyncTest3")
+        real_home = Path.home
+        try:
+            fake_home = Path(self.test_dir) / "fake_user3"
+            mac_steam = fake_home / "Library" / "Application Support" / "Steam"
+            (mac_steam / "config").mkdir(parents=True, exist_ok=True)
+            (mac_steam / "config" / "loginusers.vdf").write_text('"users" { }')
+            (mac_steam / "registry.vdf").write_text('"Registry" { "AutoLoginUser" "testuser" }')
+
+            Path.home = lambda: fake_home
+
+            copied = StoreManager.sync_native_steam_login(bottle)
+            self.assertTrue(copied)
+
+            b_steam = BottleManager.get_bottle_dir(bottle.id) / "drive_c" / "Program Files (x86)" / "Steam"
+            self.assertTrue((b_steam / "registry.vdf").exists())
+            self.assertIn("AutoLoginUser", (b_steam / "registry.vdf").read_text())
+        finally:
+            Path.home = real_home
+
+    def test_detect_installed_stores_auto_registers_steam(self):
+        """[FR-26, FR-27] Verify auto-detection of manually installed stores in Drive C:."""
+        bottle = BottleManager.create_bottle("AutoDetectStoreTest")
+        b_dir = BottleManager.get_bottle_dir(bottle.id)
+        steam_exe = b_dir / "drive_c" / "Program Files (x86)" / "Steam" / "steam.exe"
+        steam_exe.parent.mkdir(parents=True, exist_ok=True)
+        steam_exe.write_text("MZ_DUMMY_STEAM")
+
+        detected = StoreManager.detect_installed_stores(bottle)
+        self.assertEqual(len(detected), 1)
+        self.assertEqual(detected[0].name, "Steam")
+        self.assertIn("-no-cef-sandbox", detected[0].arguments)
+        self.assertIn("-cef-disable-gpu", detected[0].arguments)
+
+    def test_launch_store_installer_missing_files_raises(self):
+        """[FR-26] Verify launch_store_installer raises clear errors on missing files/runners."""
+        bottle = BottleManager.create_bottle("LaunchInstallerTest")
+        with self.assertRaises(FileNotFoundError):
+            StoreManager.launch_store_installer(bottle, Path(self.test_dir) / "nonexistent_setup.exe")
+
 
 if __name__ == "__main__":
     unittest.main()
