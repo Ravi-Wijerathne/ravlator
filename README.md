@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/Python-3.12%2B-blue?logo=python" alt="Python 3.12+" />
   <img src="https://img.shields.io/badge/GUI-PySide6%20(Qt%206)-green?logo=qt" alt="PySide6" />
   <img src="https://img.shields.io/badge/Specification-ISO%2FIEC%2FIEEE%2029148-orange" alt="SRS Specification" />
-  <img src="https://img.shields.io/badge/Tests-46%20Passed-brightgreen" alt="Tests" />
+  <img src="https://img.shields.io/badge/Tests-49%20Passed-brightgreen" alt="Tests" />
 </p>
 
 ---
@@ -44,8 +44,9 @@ Ravlator bridges the gap between raw Wine/GPTK translation layers and modern mac
 - **Emulated Virtual Desktop:** Run legacy games that fail in fullscreen mode inside contained, fixed-resolution desktop viewports.
 
 ### 🏪 Game Store Deployments & Shortcut Generation
-- **One-Click Store Deployments:** Automated silent installation and sandboxing of **Steam**, **Epic Games Launcher**, and **GOG Galaxy**.
-- **Steam Client Protection:** Automatic injection of Chromium Embedded Framework stability parameters (`-no-cef-sandbox -cef-disable-gpu -noverifyfiles -allossearch`).
+- **Guided Store Setup:** Guided installation of official Windows client installers for **Steam**, **Epic Games Launcher**, **GOG Galaxy**, **EA App**, and **Battle.net**.
+- **Auto-Detection & Stability Injection:** Automatic scanning of Drive C: and instant injection of mandatory Chromium Embedded Framework stability parameters (`-no-cef-sandbox -cef-disable-gpu -noverifyfiles -allossearch`) for Steam.
+- **Native Steam Login Cache Sync:** 1-click credential synchronization from native macOS Steam (`config.vdf`, `loginusers.vdf`, `registry.vdf`, `userdata`) to log in seamlessly without CEF web login errors.
 - **Standalone macOS `.app` Bundles:** Generate self-contained, double-clickable macOS applications on your Desktop, complete with PE icons extracted directly from Windows `.exe` binaries.
 
 ### 📦 Dependencies Catalog & Winetricks
